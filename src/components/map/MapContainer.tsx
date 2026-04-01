@@ -13,10 +13,13 @@ import { supabase } from '@/lib/supabase/client';
 import { SOURCE_KEYS } from '@/lib/constants';
 import type { StationFeatureCollection } from '@/types';
 
+// Cache loaded source data for re-adding after style changes
+const sourceDataCache: Record<string, StationFeatureCollection> = {};
+
 export default function MapContainer() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
-  const popup = useRef<maplibregl.Popup | null>(null);
+  const isMovingProgrammatically = useRef(false);
 
   const { center, zoom, mapStyle } = useMapStore();
   const { activeLayers, setSourceError } = useLayerStore();
@@ -28,13 +31,90 @@ export default function MapContainer() {
         source_keys: [sourceKey],
       });
       if (error) throw error;
-      return data as StationFeatureCollection;
+      const geojson = data as StationFeatureCollection;
+      sourceDataCache[sourceKey] = geojson;
+      return geojson;
     } catch (err) {
       console.error(`Fout bij laden ${sourceKey}:`, err);
       setSourceError(sourceKey, err instanceof Error ? err.message : 'Onbekende fout');
       return null;
     }
   }, [setSourceError]);
+
+  // Add all source layers to the map (used on initial load and after style change)
+  const addAllLayers = useCallback((m: maplibregl.Map) => {
+    const currentActiveLayers = useLayerStore.getState().activeLayers;
+
+    for (const sourceKey of SOURCE_KEYS) {
+      const data = sourceDataCache[sourceKey];
+      if (!data) continue;
+
+      // Skip if source already exists
+      if (m.getSource(sourceKey)) continue;
+
+      const sourceSpec = createGeoJSONSourceSpec(sourceKey, data);
+      m.addSource(sourceKey, sourceSpec);
+
+      const markerConfig = MARKER_CONFIGS[sourceKey];
+      const color = markerConfig?.color || '#888888';
+      const isActive = currentActiveLayers.has(sourceKey);
+      const visibility = isActive ? 'visible' : 'none';
+
+      // Unclustered points
+      m.addLayer({
+        id: `${sourceKey}-points`,
+        type: 'circle',
+        source: sourceKey,
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-radius': markerConfig?.size || 8,
+          'circle-color': color,
+          'circle-stroke-width': markerConfig?.strokeWidth || 1,
+          'circle-stroke-color': markerConfig?.strokeColor || '#FFFFFF',
+        },
+        layout: { visibility },
+      });
+
+      // Cluster circles
+      m.addLayer({
+        id: `${sourceKey}-clusters`,
+        type: 'circle',
+        source: sourceKey,
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': color,
+          'circle-radius': [
+            'step', ['get', 'point_count'],
+            15, 10,
+            20, 50,
+            25, 100,
+            30,
+          ],
+          'circle-opacity': 0.8,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#FFFFFF',
+        },
+        layout: { visibility },
+      });
+
+      // Cluster count labels
+      m.addLayer({
+        id: `${sourceKey}-cluster-count`,
+        type: 'symbol',
+        source: sourceKey,
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': '{point_count_abbreviated}',
+          'text-font': ['Open Sans Bold'],
+          'text-size': 12,
+          visibility,
+        },
+        paint: {
+          'text-color': '#FFFFFF',
+        },
+      });
+    }
+  }, []);
 
   // Initialize map
   useEffect(() => {
@@ -62,80 +142,17 @@ export default function MapContainer() {
     m.on('load', async () => {
       // Load data for each source
       for (const sourceKey of SOURCE_KEYS) {
-        const data = await loadSourceData(sourceKey);
-        if (!data) continue;
-
-        const sourceSpec = createGeoJSONSourceSpec(sourceKey, data);
-        m.addSource(sourceKey, sourceSpec);
-
-        const markerConfig = MARKER_CONFIGS[sourceKey];
-        const color = markerConfig?.color || '#888888';
-
-        // Unclustered points
-        m.addLayer({
-          id: `${sourceKey}-points`,
-          type: 'circle',
-          source: sourceKey,
-          filter: ['!', ['has', 'point_count']],
-          paint: {
-            'circle-radius': markerConfig?.size || 8,
-            'circle-color': color,
-            'circle-stroke-width': markerConfig?.strokeWidth || 1,
-            'circle-stroke-color': markerConfig?.strokeColor || '#FFFFFF',
-          },
-        });
-
-        // Cluster circles
-        m.addLayer({
-          id: `${sourceKey}-clusters`,
-          type: 'circle',
-          source: sourceKey,
-          filter: ['has', 'point_count'],
-          paint: {
-            'circle-color': color,
-            'circle-radius': [
-              'step', ['get', 'point_count'],
-              15, 10,
-              20, 50,
-              25, 100,
-              30,
-            ],
-            'circle-opacity': 0.8,
-            'circle-stroke-width': 2,
-            'circle-stroke-color': '#FFFFFF',
-          },
-        });
-
-        // Cluster count labels
-        m.addLayer({
-          id: `${sourceKey}-cluster-count`,
-          type: 'symbol',
-          source: sourceKey,
-          filter: ['has', 'point_count'],
-          layout: {
-            'text-field': '{point_count_abbreviated}',
-            'text-font': ['Open Sans Bold'],
-            'text-size': 12,
-          },
-          paint: {
-            'text-color': '#FFFFFF',
-          },
-        });
-
-        // Set initial visibility
-        const isActive = activeLayers.has(sourceKey);
-        const visibility = isActive ? 'visible' : 'none';
-        m.setLayoutProperty(`${sourceKey}-points`, 'visibility', visibility);
-        m.setLayoutProperty(`${sourceKey}-clusters`, 'visibility', visibility);
-        m.setLayoutProperty(`${sourceKey}-cluster-count`, 'visibility', visibility);
+        await loadSourceData(sourceKey);
       }
+      addAllLayers(m);
     });
 
     // Handle station clicks
     m.on('click', (e) => {
-      const features = m.queryRenderedFeatures(e.point, {
-        layers: SOURCE_KEYS.map((key) => `${key}-points`),
-      });
+      const pointLayers = SOURCE_KEYS.map((key) => `${key}-points`).filter((id) => m.getLayer(id));
+      if (pointLayers.length === 0) return;
+
+      const features = m.queryRenderedFeatures(e.point, { layers: pointLayers });
 
       if (features.length > 0) {
         const feature = features[0];
@@ -146,13 +163,36 @@ export default function MapContainer() {
       }
     });
 
-    // Change cursor on hover
-    const pointLayers = SOURCE_KEYS.map((key) => `${key}-points`);
-    m.on('mouseenter', pointLayers[0], () => { m.getCanvas().style.cursor = 'pointer'; });
-    m.on('mouseleave', pointLayers[0], () => { m.getCanvas().style.cursor = ''; });
+    // Change cursor on hover for ALL point layers
+    for (const sourceKey of SOURCE_KEYS) {
+      m.on('mouseenter', `${sourceKey}-points`, () => { m.getCanvas().style.cursor = 'pointer'; });
+      m.on('mouseleave', `${sourceKey}-points`, () => { m.getCanvas().style.cursor = ''; });
+    }
+
+    // Cluster click-to-zoom
+    for (const sourceKey of SOURCE_KEYS) {
+      m.on('click', `${sourceKey}-clusters`, (e) => {
+        const features = m.queryRenderedFeatures(e.point, { layers: [`${sourceKey}-clusters`] });
+        if (!features.length) return;
+        const clusterId = features[0].properties?.cluster_id;
+        const source = m.getSource(sourceKey) as maplibregl.GeoJSONSource;
+        if (source && clusterId !== undefined) {
+          source.getClusterExpansionZoom(clusterId).then((zoom) => {
+            const geometry = features[0].geometry;
+            if (geometry.type === 'Point') {
+              m.easeTo({ center: geometry.coordinates as [number, number], zoom });
+            }
+          });
+        }
+      });
+    }
 
     // Sync map state back to store
     m.on('moveend', () => {
+      if (isMovingProgrammatically.current) {
+        isMovingProgrammatically.current = false;
+        return;
+      }
       const c = m.getCenter();
       const z = m.getZoom();
       useMapStore.getState().setViewport({
@@ -168,6 +208,25 @@ export default function MapContainer() {
       map.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync store viewport changes to map (for search flyTo, zoom buttons, etc.)
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+
+    const currentCenter = m.getCenter();
+    const currentZoom = m.getZoom();
+    const [lng, lat] = center;
+
+    // Only fly if the store value meaningfully differs from the map's current state
+    const centerChanged = Math.abs(currentCenter.lng - lng) > 0.0001 || Math.abs(currentCenter.lat - lat) > 0.0001;
+    const zoomChanged = Math.abs(currentZoom - zoom) > 0.01;
+
+    if (centerChanged || zoomChanged) {
+      isMovingProgrammatically.current = true;
+      m.flyTo({ center: [lng, lat], zoom, duration: 800 });
+    }
+  }, [center, zoom]);
 
   // Sync layer visibility
   useEffect(() => {
@@ -192,12 +251,15 @@ export default function MapContainer() {
     }
   }, [activeLayers]);
 
-  // Sync map style
+  // Sync map style - re-add layers after style change
   useEffect(() => {
     const m = map.current;
     if (!m) return;
     m.setStyle(getMapStyleUrl(mapStyle));
-  }, [mapStyle]);
+    m.once('style.load', () => {
+      addAllLayers(m);
+    });
+  }, [mapStyle, addAllLayers]);
 
   return <div ref={mapContainer} className="w-full h-full" />;
 }

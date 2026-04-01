@@ -46,7 +46,7 @@ export default function SearchBar() {
   }, [results]);
 
   return (
-    <div className="absolute top-4 left-4 right-4 md:left-auto md:right-4 md:w-80 z-20">
+    <div className="absolute top-4 left-14 right-4 md:left-auto md:right-4 md:w-80 z-20">
       <div className="relative">
         <div className="relative">
           <svg
