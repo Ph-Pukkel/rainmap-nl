@@ -1,0 +1,8 @@
+INSERT INTO data_sources (source_key, display_name, description, source_type, api_base_url, requires_key, icon_marker, color, layer_order) VALUES
+  ('knmi_aws',      'KNMI Automatische Stations',  'De 50 officiële realtime weerstations van het KNMI',     'professioneel', 'https://api.dataplatform.knmi.nl/open-data/v1/', true,  'knmi-marker',    '#E74C3C', 1),
+  ('knmi_neerslag', 'KNMI Neerslagvrijwilligers',   'Netwerk van ~300 handmatige neerslagstations',           'vrijwilliger',  'https://api.dataplatform.knmi.nl/open-data/v1/', true,  'knmi-vol-marker','#E67E22', 2),
+  ('rws_waterinfo', 'Rijkswaterstaat Waterinfo',    'Meetpunten langs de rijkswateren',                       'professioneel', 'https://waterinfo.rws.nl/api/',                  false, 'rws-marker',     '#3498DB', 3),
+  ('waterschappen', 'Waterschappen',                'Meetpunten van de 21 waterschappen via WFS',             'professioneel', NULL,                                            false, 'ws-marker',      '#2ECC71', 4),
+  ('wow_nl',        'WOW-NL (Citizen Science)',     'Amateur-weerstations via Weather Observations Website',  'vrijwilliger',  'https://wow.knmi.nl/',                          false, 'wow-marker',     '#9B59B6', 5),
+  ('netatmo',       'Netatmo Netwerk',              'Geanonimiseerde locaties van consumenten-regenmeters',   'consument',     'https://api.netatmo.com/api/',                  true,  'netatmo-marker', '#1ABC9C', 6),
+  ('agro',          'Agro-meetnetten',              'Agrarische netwerken (AgroExact, Sencrop)',               'professioneel', NULL,                                            true,  'agro-marker',    '#F39C12', 7);
