@@ -110,6 +110,72 @@ async function runSync(sourceKey: string, fetchFn: () => Promise<StationRecord[]
 const SOURCE_KEY_AWS = 'knmi_aws';
 const SOURCE_KEY_NEERSLAG = 'knmi_neerslag';
 
+// All KNMI automated weather stations (AWS) with their official coordinates.
+// Source: KNMI stationslijst (https://www.knmi.nl/over-het-knmi/about/meteo-data)
+// These locations are stable and rarely change.
+const KNMI_AWS_STATIONS: Array<{
+  code: number;
+  name: string;
+  lat: number;
+  lon: number;
+  elevation_m: number;
+  municipality?: string;
+  province?: string;
+}> = [
+  { code: 210, name: 'Valkenburg', lat: 52.171, lon: 4.419, elevation_m: 0, municipality: 'Katwijk', province: 'Zuid-Holland' },
+  { code: 215, name: 'Voorschoten', lat: 52.121, lon: 4.430, elevation_m: -1, municipality: 'Voorschoten', province: 'Zuid-Holland' },
+  { code: 225, name: 'IJmuiden', lat: 52.463, lon: 4.555, elevation_m: 4, municipality: 'Velsen', province: 'Noord-Holland' },
+  { code: 229, name: 'IJmuiden (WP)', lat: 52.462, lon: 4.515, elevation_m: 0, province: 'Noord-Holland' },
+  { code: 235, name: 'De Kooy', lat: 52.924, lon: 4.785, elevation_m: 0, municipality: 'Den Helder', province: 'Noord-Holland' },
+  { code: 240, name: 'Schiphol', lat: 52.318, lon: 4.790, elevation_m: -3, municipality: 'Haarlemmermeer', province: 'Noord-Holland' },
+  { code: 242, name: 'Vlieland', lat: 53.241, lon: 4.921, elevation_m: 9, municipality: 'Vlieland', province: 'Friesland' },
+  { code: 248, name: 'Wijdenes', lat: 52.635, lon: 5.173, elevation_m: -2, municipality: 'Drechterland', province: 'Noord-Holland' },
+  { code: 249, name: 'Berkhout', lat: 52.644, lon: 4.979, elevation_m: -2, municipality: 'Koggenland', province: 'Noord-Holland' },
+  { code: 251, name: 'Hoorn (Terschelling)', lat: 53.392, lon: 5.346, elevation_m: 1, municipality: 'Terschelling', province: 'Friesland' },
+  { code: 252, name: 'K13 Platform', lat: 53.219, lon: 3.221, elevation_m: 0 },
+  { code: 257, name: 'Wijk aan Zee', lat: 52.503, lon: 4.574, elevation_m: 4, municipality: 'Beverwijk', province: 'Noord-Holland' },
+  { code: 258, name: 'Houtribdijk', lat: 52.649, lon: 5.401, elevation_m: 0, province: 'Flevoland' },
+  { code: 260, name: 'De Bilt', lat: 52.101, lon: 5.177, elevation_m: 2, municipality: 'De Bilt', province: 'Utrecht' },
+  { code: 265, name: 'Soesterberg', lat: 52.127, lon: 5.275, elevation_m: 14, municipality: 'Soest', province: 'Utrecht' },
+  { code: 267, name: 'Stavoren', lat: 52.899, lon: 5.384, elevation_m: 0, municipality: 'Sudwest-Fryslan', province: 'Friesland' },
+  { code: 269, name: 'Lelystad', lat: 52.458, lon: 5.520, elevation_m: -4, municipality: 'Lelystad', province: 'Flevoland' },
+  { code: 270, name: 'Leeuwarden', lat: 53.224, lon: 5.752, elevation_m: 1, municipality: 'Leeuwarden', province: 'Friesland' },
+  { code: 273, name: 'Marknesse', lat: 52.703, lon: 5.889, elevation_m: -3, municipality: 'Noordoostpolder', province: 'Flevoland' },
+  { code: 275, name: 'Deelen', lat: 52.060, lon: 5.873, elevation_m: 48, municipality: 'Arnhem', province: 'Gelderland' },
+  { code: 277, name: 'Lauwersoog', lat: 53.409, lon: 6.199, elevation_m: 1, municipality: 'Het Hogeland', province: 'Groningen' },
+  { code: 278, name: 'Heino', lat: 52.435, lon: 6.259, elevation_m: 4, municipality: 'Raalte', province: 'Overijssel' },
+  { code: 279, name: 'Hoogeveen', lat: 52.730, lon: 6.574, elevation_m: 15, municipality: 'Hoogeveen', province: 'Drenthe' },
+  { code: 280, name: 'Eelde', lat: 53.125, lon: 6.585, elevation_m: 5, municipality: 'Tynaarlo', province: 'Drenthe' },
+  { code: 283, name: 'Hupsel', lat: 52.069, lon: 6.657, elevation_m: 29, municipality: 'Berkelland', province: 'Gelderland' },
+  { code: 286, name: 'Nieuw Beerta', lat: 53.196, lon: 7.150, elevation_m: 0, municipality: 'Oldambt', province: 'Groningen' },
+  { code: 290, name: 'Twenthe', lat: 52.274, lon: 6.891, elevation_m: 34, municipality: 'Enschede', province: 'Overijssel' },
+  { code: 310, name: 'Vlissingen', lat: 51.442, lon: 3.596, elevation_m: 8, municipality: 'Vlissingen', province: 'Zeeland' },
+  { code: 311, name: 'Hoofdplaat', lat: 51.379, lon: 3.672, elevation_m: 0, municipality: 'Terneuzen', province: 'Zeeland' },
+  { code: 312, name: 'Oosterschelde', lat: 51.768, lon: 3.622, elevation_m: 0, province: 'Zeeland' },
+  { code: 313, name: 'Vlakte van de Raan', lat: 51.496, lon: 3.242, elevation_m: 0 },
+  { code: 315, name: 'Hansweert', lat: 51.442, lon: 4.003, elevation_m: 0, municipality: 'Reimerswaal', province: 'Zeeland' },
+  { code: 316, name: 'Schaar', lat: 51.658, lon: 3.698, elevation_m: 0, province: 'Zeeland' },
+  { code: 319, name: 'Westdorpe', lat: 51.226, lon: 3.862, elevation_m: 1, municipality: 'Terneuzen', province: 'Zeeland' },
+  { code: 320, name: 'Goeree (LE)', lat: 51.926, lon: 3.668, elevation_m: 12, province: 'Zuid-Holland' },
+  { code: 323, name: 'Wilhelminadorp', lat: 51.527, lon: 3.884, elevation_m: 1, municipality: 'Goes', province: 'Zeeland' },
+  { code: 324, name: 'Stavenisse', lat: 51.596, lon: 4.008, elevation_m: 0, municipality: 'Tholen', province: 'Zeeland' },
+  { code: 330, name: 'Hoek van Holland', lat: 51.992, lon: 4.120, elevation_m: 4, municipality: 'Rotterdam', province: 'Zuid-Holland' },
+  { code: 331, name: 'Tholen', lat: 51.528, lon: 4.130, elevation_m: 0, municipality: 'Tholen', province: 'Zeeland' },
+  { code: 340, name: 'Woensdrecht', lat: 51.449, lon: 4.342, elevation_m: 15, municipality: 'Woensdrecht', province: 'Noord-Brabant' },
+  { code: 343, name: 'Rotterdam Geulhaven', lat: 51.893, lon: 4.313, elevation_m: -3, municipality: 'Rotterdam', province: 'Zuid-Holland' },
+  { code: 344, name: 'Rotterdam', lat: 51.962, lon: 4.447, elevation_m: -5, municipality: 'Rotterdam', province: 'Zuid-Holland' },
+  { code: 348, name: 'Cabauw', lat: 51.970, lon: 4.926, elevation_m: -1, municipality: 'Lopik', province: 'Utrecht' },
+  { code: 350, name: 'Gilze-Rijen', lat: 51.566, lon: 4.936, elevation_m: 11, municipality: 'Gilze en Rijen', province: 'Noord-Brabant' },
+  { code: 356, name: 'Herwijnen', lat: 51.859, lon: 5.146, elevation_m: 1, municipality: 'West Betuwe', province: 'Gelderland' },
+  { code: 370, name: 'Eindhoven', lat: 51.451, lon: 5.377, elevation_m: 23, municipality: 'Eindhoven', province: 'Noord-Brabant' },
+  { code: 375, name: 'Volkel', lat: 51.659, lon: 5.707, elevation_m: 20, municipality: 'Uden', province: 'Noord-Brabant' },
+  { code: 377, name: 'Ell', lat: 51.198, lon: 5.764, elevation_m: 30, municipality: 'Leudal', province: 'Limburg' },
+  { code: 380, name: 'Maastricht', lat: 50.906, lon: 5.762, elevation_m: 114, municipality: 'Maastricht', province: 'Limburg' },
+  { code: 391, name: 'Arcen', lat: 51.498, lon: 6.197, elevation_m: 19, municipality: 'Venlo', province: 'Limburg' },
+  { code: 205, name: 'Borkum', lat: 53.575, lon: 6.748, elevation_m: 3 },
+  { code: 208, name: 'Lichteiland Goeree', lat: 51.926, lon: 3.669, elevation_m: 12, province: 'Zuid-Holland' },
+];
+
 async function getKNMIApiKey(): Promise<string> {
   const supabase = createServiceClient();
   const { data } = await supabase
@@ -122,115 +188,69 @@ async function getKNMIApiKey(): Promise<string> {
 
 async function fetchKNMIAWSStations(): Promise<StationRecord[]> {
   const apiKey = await getKNMIApiKey();
-  if (!apiKey) throw new Error('KNMI API-key niet geconfigureerd');
 
-  const baseUrl = 'https://api.dataplatform.knmi.nl/open-data/v1/';
+  // Convert hardcoded stations to StationRecord format
+  const stations: StationRecord[] = KNMI_AWS_STATIONS.map((s) => ({
+    external_id: String(s.code),
+    name: s.name,
+    latitude: s.lat,
+    longitude: s.lon,
+    municipality: s.municipality,
+    province: s.province,
+    operator: 'KNMI',
+    sensor_type: 'Automatisch weerstation',
+    elevation_m: s.elevation_m,
+    metadata: {
+      station_code: s.code,
+      data_note: 'Stationslocaties zijn hardcoded; KNMI levert meetdata nu in NetCDF-formaat via de 10-minute-in-situ-meteorological-observations dataset.',
+    },
+  }));
 
-  const listResp = await fetch(`${baseUrl}datasets/Actuele10telegraafdata/versions/2/files`, {
-    headers: { Authorization: apiKey },
-  });
+  // Attempt to fetch the latest 10-min observations file listing to record
+  // the most recent timestamp, even though we cannot parse the NetCDF data.
+  if (apiKey) {
+    try {
+      const listUrl =
+        'https://api.dataplatform.knmi.nl/open-data/v1/datasets/10-minute-in-situ-meteorological-observations/versions/1.0/files?maxKeys=1&sorting=desc&orderBy=lastModified';
+      const listResp = await fetch(listUrl, {
+        headers: { Authorization: apiKey },
+      });
+      if (listResp.ok) {
+        const listData = await listResp.json();
+        const files = listData.files || [];
+        if (files.length > 0) {
+          const latestFilename = files[0].filename as string;
+          // Extract timestamp from filename like KMDS__OPER_P___10M_OBS_L2_202604010000.nc
+          const tsMatch = latestFilename.match(/(\d{12})\.nc$/);
+          const latestTimestamp = tsMatch ? tsMatch[1] : null;
+          console.log(`KNMI AWS: laatste bestand = ${latestFilename}`);
 
-  if (!listResp.ok) throw new Error(`KNMI API fout: ${listResp.status}`);
-  const listData = await listResp.json();
-
-  const files = listData.files || [];
-  if (files.length === 0) throw new Error('Geen KNMI data bestanden gevonden');
-
-  const latestFile = files[files.length - 1];
-
-  const urlResp = await fetch(
-    `${baseUrl}datasets/Actuele10telegraafdata/versions/2/files/${latestFile.filename}/url`,
-    { headers: { Authorization: apiKey } }
-  );
-
-  if (!urlResp.ok) throw new Error(`KNMI download URL fout: ${urlResp.status}`);
-  const urlData = await urlResp.json();
-
-  const dataResp = await fetch(urlData.temporaryDownloadUrl);
-  const rawText = await dataResp.text();
-
-  return parseKNMIData(rawText);
-}
-
-function parseKNMIData(text: string): StationRecord[] {
-  const stations: StationRecord[] = [];
-  const lines = text.split('\n');
-
-  for (const line of lines) {
-    if (line.startsWith('# STN')) {
-      continue;
+          // Attach metadata about latest available data to all stations
+          for (const station of stations) {
+            station.metadata = {
+              ...station.metadata,
+              latest_netcdf_file: latestFilename,
+              latest_data_timestamp: latestTimestamp,
+            };
+          }
+        }
+      } else {
+        console.log(`KNMI API bestandslijst fout: ${listResp.status} (niet-kritiek, stations worden alsnog gesynchroniseerd)`);
+      }
+    } catch (err) {
+      console.log(`KNMI API bestandslijst ophalen mislukt: ${(err as Error).message} (niet-kritiek)`);
     }
-    if (line.startsWith('#')) continue;
-    if (!line.trim()) continue;
-
-    const values = line.split(',').map(v => v.trim());
-
-    if (values.length < 5) continue;
-
-    const stnCode = values[0];
-
-    stations.push({
-      external_id: stnCode,
-      name: `KNMI Station ${stnCode}`,
-      latitude: 0,
-      longitude: 0,
-      operator: 'KNMI',
-      sensor_type: 'Automatisch weerstation',
-      metadata: { raw_values: values },
-    });
   }
 
+  console.log(`KNMI AWS: ${stations.length} stations opgehaald (hardcoded locaties)`);
   return stations;
 }
 
 async function fetchKNMINeerslagStations(): Promise<StationRecord[]> {
-  const apiKey = await getKNMIApiKey();
-  if (!apiKey) throw new Error('KNMI API-key niet geconfigureerd');
-
-  const baseUrl = 'https://api.dataplatform.knmi.nl/open-data/v1/';
-
-  const listResp = await fetch(`${baseUrl}datasets/neerslagstations_metadata/versions/1/files`, {
-    headers: { Authorization: apiKey },
-  });
-
-  if (!listResp.ok) throw new Error(`KNMI Neerslag API fout: ${listResp.status}`);
-  const listData = await listResp.json();
-
-  const files = listData.files || [];
-  if (files.length === 0) return [];
-
-  const latestFile = files[files.length - 1];
-
-  const urlResp = await fetch(
-    `${baseUrl}datasets/neerslagstations_metadata/versions/1/files/${latestFile.filename}/url`,
-    { headers: { Authorization: apiKey } }
-  );
-
-  if (!urlResp.ok) throw new Error(`KNMI Neerslag URL fout: ${urlResp.status}`);
-  const urlData = await urlResp.json();
-
-  const dataResp = await fetch(urlData.temporaryDownloadUrl);
-  const data = await dataResp.json();
-
-  const stations: StationRecord[] = [];
-
-  if (Array.isArray(data)) {
-    for (const item of data) {
-      stations.push({
-        external_id: item.stationcode || item.code || String(item.id),
-        name: item.stationname || item.naam || `Neerslagstation ${item.stationcode}`,
-        latitude: item.lat || item.latitude || 0,
-        longitude: item.lon || item.longitude || 0,
-        municipality: item.municipality || item.gemeente,
-        province: item.province || item.provincie,
-        operator: 'KNMI Vrijwilliger',
-        sensor_type: 'Handmatige neerslagmeter',
-        elevation_m: item.alt || item.hoogte,
-      });
-    }
-  }
-
-  return stations;
+  // The KNMI neerslag station metadata is now provided in NetCDF format,
+  // which cannot be parsed in a Deno Edge Function. Return empty with a note.
+  console.log('KNMI Neerslag: data-formaat is gewijzigd naar NetCDF, kan niet worden geparseerd in Edge Function');
+  return [];
 }
 
 Deno.serve(async (req) => {
@@ -238,14 +258,20 @@ Deno.serve(async (req) => {
   const sourceType = url.searchParams.get('type') || 'aws';
 
   try {
-    let result;
+    let result: SyncResult;
     if (sourceType === 'neerslag') {
       result = await runSync(SOURCE_KEY_NEERSLAG, fetchKNMINeerslagStations);
     } else {
       result = await runSync(SOURCE_KEY_AWS, fetchKNMIAWSStations);
     }
 
-    return new Response(JSON.stringify(result), {
+    // Add informational message for neerslag
+    const response: Record<string, unknown> = { ...result };
+    if (sourceType === 'neerslag') {
+      response.message = 'KNMI neerslagstations metadata is nu in NetCDF-formaat. Handmatige import of alternatieve bron nodig.';
+    }
+
+    return new Response(JSON.stringify(response), {
       headers: { 'Content-Type': 'application/json' },
       status: result.errors.length > 0 ? 500 : 200,
     });
