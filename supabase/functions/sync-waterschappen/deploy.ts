@@ -105,172 +105,174 @@ async function runSync(sourceKey: string, fetchFn: () => Promise<StationRecord[]
   }
 }
 
-// --- sync-waterschappen business logic (Lizard API) ---
-// Verified working 2026-04-02. Each waterschap has its own Lizard subdomain.
-// The timeseries endpoint returns abbreviated locations (no geometry/organisation),
-// so we fetch each location individually by UUID to get coordinates.
+// --- sync-waterschappen business logic (KNMI Data Platform) ---
+// Source: KNMI combined waterboard rain gauge dataset
+// Dataset: waterboard_raingauge_quality_controlled_all_combined
+// Contains 5-minute accumulated rainfall from rain gauges operated by
+// 10 waterschappen, collected and quality-controlled by KNMI.
+// Verified working 2026-04-02. XML is FEWS PI TimeSeries format.
 
 const SOURCE_KEY = 'waterschappen';
 
-// Waterschap Lizard configs. Each uses a different subdomain and obs type code.
-// WNS1400 (id=36) is exclusively KNMI radar data and is NOT included here.
-// Verified 2026-04-02: these are the only 4 waterschappen with publicly
-// accessible rain gauge data via Lizard API. Other waterschappen either
-// don't publish via Lizard, require authentication, or use the closed
-// WIWB/HydroNET system via Het Waterschapshuis.
-const WATERSCHAP_CONFIGS: {
-  operator: string;
-  baseUrl: string;
-  obsTypeCode: string;
-  rainfallPeriod: string;
-}[] = [
-  {
-    operator: 'Hoogheemraadschap Hollands Noorderkwartier',
-    baseUrl: 'https://hhnk.lizard.net/api/v4',
-    obsTypeCode: 'P.meting.1m',
-    rainfallPeriod: '1min',
-  },
-  {
-    operator: "Waterschap Hunze en Aa's",
-    baseUrl: 'https://hunzeenaas.lizard.net/api/v4',
-    obsTypeCode: 'WNS9028',
-    rainfallPeriod: 'cumulative',
-  },
-  {
-    operator: 'Waterschap Zuiderzeeland',
-    baseUrl: 'https://zuiderzeeland.lizard.net/api/v4',
-    obsTypeCode: 'WNS3380',
-    rainfallPeriod: 'cumulative',
-  },
-  {
-    operator: 'Hoogheemraadschap De Stichtse Rijnlanden',
-    baseUrl: 'https://hdsr.lizard.net/api/v4',
-    obsTypeCode: 'Rh.5',
-    rainfallPeriod: '5min',
-  },
-];
+const KNMI_DATASET = 'waterboard_raingauge_quality_controlled_all_combined';
+const KNMI_API_BASE = 'https://api.dataplatform.knmi.nl/open-data/v1';
 
-interface LizardTimeseriesShort {
-  uuid: string;
-  location: {
-    url: string;
-    uuid: string;
-    name: string;
-    code: string;
-  } | null;
-  observation_type: {
-    code: string;
-    parameter: string;
-    unit: string;
-  } | null;
-  last_value: number | null;
-  last_value_timestamp: string | null;
+// Map location ID prefixes to waterschap operators
+function getOperator(locationId: string, name: string): string {
+  if (/^(020|094|097|180|239|249|448|462)-/.test(locationId)) return 'Hoogheemraadschap van Rijnland';
+  if (/^65[01]\d$/.test(locationId)) return 'Hoogheemraadschap De Stichtse Rijnlanden';
+  if (/^(meetlocatie_rgn|tcn_)/.test(locationId)) return 'Hoogheemraadschap van Delfland';
+  if (/^s\d+ki$/.test(locationId)) return 'Hoogheemraadschap Hollands Noorderkwartier';
+  if (locationId.startsWith('nl33')) return "Waterschap Hunze en Aa's";
+  if (locationId.startsWith('nl34')) return 'Waterschap Noorderzijlvest';
+  if (locationId.startsWith('nrs_wdod')) return 'Waterschap Drents Overijsselse Delta';
+  if (locationId.startsWith('mpn')) return 'Waterschap Zuiderzeeland';
+  if (/^(rwzi_|p_|riool_gemaal_|rosmalen|nistelrode|mill|holthees|boxmeer|elshout|hutten_|peelse_|snelleloop)/.test(locationId)) return 'Waterschap Aa en Maas';
+  if (locationId.startsWith('tml')) return 'Wetterskip Fryslân';
+  return 'Waterschap (onbekend)';
 }
 
-interface LizardLocation {
-  uuid: string;
+// KNMI Data Platform API key (free, public registration)
+const KNMI_API_KEY_DEFAULT = 'eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6ImYzYWQzMTQyZmEwYzQ5MTRiNDc5NmE4NjYxYjk4NDgzIiwiaCI6Im11cm11cjEyOCJ9';
+
+async function fetchLatestKNMIFile(): Promise<string> {
+  const apiKey = Deno.env.get('KNMI_API_KEY') || KNMI_API_KEY_DEFAULT;
+
+  // List most recent file
+  const listUrl = `${KNMI_API_BASE}/datasets/${KNMI_DATASET}/versions/1.0/files?maxKeys=1&orderBy=lastModified&sorting=desc`;
+  const listResp = await fetch(listUrl, { headers: { Authorization: apiKey } });
+  if (!listResp.ok) throw new Error(`KNMI file list mislukt: ${listResp.status}`);
+  const listData = await listResp.json();
+  const filename = listData.files?.[0]?.filename;
+  if (!filename) throw new Error('Geen KNMI bestanden gevonden');
+  console.log(`Nieuwste KNMI bestand: ${filename}`);
+
+  // Get temporary download URL
+  const urlResp = await fetch(`${KNMI_API_BASE}/datasets/${KNMI_DATASET}/versions/1.0/files/${filename}/url`, {
+    headers: { Authorization: apiKey },
+  });
+  if (!urlResp.ok) throw new Error(`KNMI download URL mislukt: ${urlResp.status}`);
+  const urlData = await urlResp.json();
+  return urlData.temporaryDownloadUrl;
+}
+
+interface ParsedStation {
+  locationId: string;
   name: string;
-  code: string;
-  geometry: { type: string; coordinates: number[] } | null;
-  organisation?: { name: string; uuid: string } | null;
+  lat: number;
+  lon: number;
+  lastValue: number | null;
+  lastTimestamp: string | null;
+  flag: string | null;
 }
 
-interface LizardPageResponse {
-  count: number;
-  next: string | null;
-  results: LizardTimeseriesShort[];
-}
+function parseKNMIXml(xml: string): ParsedStation[] {
+  const stations: ParsedStation[] = [];
+  const seen = new Set<string>();
 
-async function fetchAllTimeseries(baseUrl: string, obsTypeCode: string): Promise<LizardTimeseriesShort[]> {
-  const all: LizardTimeseriesShort[] = [];
-  let url: string | null = `${baseUrl}/timeseries/?format=json&observation_type__code=${encodeURIComponent(obsTypeCode)}&page_size=100`;
+  // Parse each <series> block using regex (reliable for this well-structured XML)
+  const seriesPattern = /<series>\s*<header>([\s\S]*?)<\/header>\s*([\s\S]*?)<\/series>/g;
+  let match;
 
-  while (url) {
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      console.warn(`Lizard API fout ${obsTypeCode}: ${resp.status}`);
-      break;
+  while ((match = seriesPattern.exec(xml)) !== null) {
+    const header = match[1];
+    const body = match[2];
+
+    const locationId = header.match(/<locationId>(.*?)<\/locationId>/)?.[1];
+    const name = header.match(/<stationName>(.*?)<\/stationName>/)?.[1];
+    const lat = header.match(/<lat>(.*?)<\/lat>/)?.[1];
+    const lon = header.match(/<lon>(.*?)<\/lon>/)?.[1];
+
+    if (!locationId || !name || !lat || !lon) continue;
+    if (seen.has(locationId)) continue;
+    seen.add(locationId);
+
+    // Parse the latest event
+    const eventMatch = body.match(/<event\s+date="([^"]+)"\s+time="([^"]+)"\s+value="([^"]+)"\s+flag="([^"]+)"/);
+    let lastValue: number | null = null;
+    let lastTimestamp: string | null = null;
+    let flag: string | null = null;
+
+    if (eventMatch) {
+      const val = parseFloat(eventMatch[3]);
+      lastValue = isNaN(val) ? null : val;
+      lastTimestamp = `${eventMatch[1]}T${eventMatch[2]}Z`;
+      flag = eventMatch[4];
     }
-    const page: LizardPageResponse = await resp.json();
-    all.push(...page.results);
-    url = page.next;
-  }
-  return all;
-}
 
-async function fetchLocation(locationUrl: string): Promise<LizardLocation | null> {
-  try {
-    const resp = await fetch(locationUrl);
-    if (!resp.ok) return null;
-    return await resp.json();
-  } catch {
-    return null;
+    // Decode HTML entities
+    const decodedName = name.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+
+    stations.push({
+      locationId,
+      name: decodedName,
+      lat: parseFloat(lat),
+      lon: parseFloat(lon),
+      lastValue,
+      lastTimestamp,
+      flag,
+    });
   }
+
+  return stations;
 }
 
 async function fetchWaterschappenStations(): Promise<StationRecord[]> {
+  const downloadUrl = await fetchLatestKNMIFile();
+
+  console.log('XML downloaden van KNMI...');
+  const xmlResp = await fetch(downloadUrl);
+  if (!xmlResp.ok) throw new Error(`KNMI XML download mislukt: ${xmlResp.status}`);
+  const xml = await xmlResp.text();
+  console.log(`XML ontvangen: ${xml.length} bytes`);
+
+  const parsed = parseKNMIXml(xml);
+  console.log(`${parsed.length} unieke stations geparsed`);
+
   const allStations: StationRecord[] = [];
-  const seenLocations = new Set<string>();
 
-  for (const config of WATERSCHAP_CONFIGS) {
-    try {
-      const timeseries = await fetchAllTimeseries(config.baseUrl, config.obsTypeCode);
-      console.log(`Lizard ${config.operator}: ${timeseries.length} timeseries gevonden`);
+  for (const station of parsed) {
+    // Skip coordinates outside Netherlands
+    if (station.lat < 50.5 || station.lat > 53.7 || station.lon < 3.0 || station.lon > 7.3) continue;
 
-      for (const ts of timeseries) {
-        if (!ts.location) continue;
+    const operator = getOperator(station.locationId, station.name);
 
-        const locUuid = ts.location.uuid;
-        if (seenLocations.has(locUuid)) continue;
-        seenLocations.add(locUuid);
-
-        // Fetch full location to get geometry
-        const loc = await fetchLocation(ts.location.url);
-        if (!loc?.geometry || loc.geometry.type !== 'Point') continue;
-
-        const [lon, lat] = loc.geometry.coordinates;
-
-        // Skip coordinates outside Netherlands
-        if (lat < 50.5 || lat > 53.7 || lon < 3.0 || lon > 7.3) continue;
-
-        const orgName = loc.organisation?.name || config.operator;
-
-        allStations.push({
-          external_id: `lizard-${locUuid}`,
-          name: loc.name,
-          latitude: lat,
-          longitude: lon,
-          operator: orgName,
-          sensor_type: 'rain_gauge',
-          metadata: {
-            lizard_timeseries_uuid: ts.uuid,
-            location_uuid: locUuid,
-            location_code: loc.code,
-            obs_type_code: config.obsTypeCode,
-            obs_unit: ts.observation_type?.unit || 'mm',
-            organisation: orgName,
+    allStations.push({
+      external_id: `knmi-ws-${station.locationId}`,
+      name: station.name,
+      latitude: station.lat,
+      longitude: station.lon,
+      operator,
+      sensor_type: 'rain_gauge',
+      metadata: {
+        knmi_location_id: station.locationId,
+        dataset: KNMI_DATASET,
+        organisation: operator,
+      },
+      ...(station.lastValue != null && station.lastTimestamp ? {
+        measurement: {
+          measured_at: station.lastTimestamp,
+          rainfall_mm: station.lastValue,
+          rainfall_period: '5min',
+          raw_data: {
+            knmi_location_id: station.locationId,
+            flag: station.flag,
           },
-          ...(ts.last_value != null && ts.last_value_timestamp ? {
-            measurement: {
-              measured_at: ts.last_value_timestamp,
-              rainfall_mm: ts.last_value,
-              rainfall_period: config.rainfallPeriod,
-              raw_data: {
-                lizard_timeseries_uuid: ts.uuid,
-                obs_type_code: config.obsTypeCode,
-              },
-            },
-          } : {}),
-        });
-      }
-
-      console.log(`${config.operator}: ${allStations.length} stations met coordinaten`);
-    } catch (error) {
-      console.error(`Fout bij ophalen ${config.operator}:`, error);
-    }
+        },
+      } : {}),
+    });
   }
 
-  console.log(`Waterschappen totaal: ${allStations.length} stations via Lizard API`);
+  // Group counts per operator for logging
+  const opCounts: Record<string, number> = {};
+  for (const s of allStations) {
+    opCounts[s.operator || 'onbekend'] = (opCounts[s.operator || 'onbekend'] || 0) + 1;
+  }
+  for (const [op, count] of Object.entries(opCounts).sort((a, b) => b[1] - a[1])) {
+    console.log(`  ${op}: ${count} stations`);
+  }
+  console.log(`Waterschappen totaal: ${allStations.length} stations via KNMI Data Platform`);
+
   return allStations;
 }
 
