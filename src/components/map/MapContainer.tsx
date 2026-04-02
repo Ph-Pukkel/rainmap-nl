@@ -6,7 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapStore } from '@/store/mapStore';
 import { useLayerStore } from '@/store/layerStore';
 import { useUIStore } from '@/store/uiStore';
-import { getMapStyleUrl } from '@/lib/map/styles';
+import { fetchMapStyle, getMapStyleUrl } from '@/lib/map/styles';
 import { MARKER_CONFIGS } from '@/lib/map/markers';
 import { createGeoJSONSourceSpec } from '@/lib/map/clustering';
 import { supabase } from '@/lib/supabase/client';
@@ -120,89 +120,89 @@ export default function MapContainer() {
   // Initialize map
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
+    let cancelled = false;
 
-    const m = new maplibregl.Map({
-      container: mapContainer.current,
-      style: getMapStyleUrl(mapStyle),
-      center: center,
-      zoom: zoom,
-      minZoom: 5,
-      maxZoom: 18,
-      maxBounds: [[1.0, 49.5], [9.5, 55.0]],
-    });
+    const initMap = async () => {
+      if (!mapContainer.current || map.current) return;
+      const style = await fetchMapStyle(mapStyle);
+      if (cancelled || !mapContainer.current) return;
 
-    m.addControl(new maplibregl.NavigationControl(), 'top-right');
-    m.addControl(
-      new maplibregl.GeolocateControl({
-        positionOptions: { enableHighAccuracy: true },
-        trackUserLocation: true,
-      }),
-      'top-right'
-    );
+      const m = new maplibregl.Map({
+        container: mapContainer.current,
+        style,
+        center: center,
+        zoom: zoom,
+        minZoom: 5,
+        maxZoom: 18,
+        maxBounds: [[1.0, 49.5], [9.5, 55.0]],
+      });
 
-    m.on('load', async () => {
-      // Load all sources in parallel
-      await Promise.all(SOURCE_KEYS.map((key) => loadSourceData(key)));
-      addAllLayers(m);
-    });
+      m.addControl(new maplibregl.NavigationControl(), 'top-right');
+      m.addControl(
+        new maplibregl.GeolocateControl({
+          positionOptions: { enableHighAccuracy: true },
+          trackUserLocation: true,
+        }),
+        'top-right'
+      );
 
-    // Handle station clicks
-    m.on('click', (e) => {
-      const pointLayers = SOURCE_KEYS.map((key) => `${key}-points`).filter((id) => m.getLayer(id));
-      if (pointLayers.length === 0) return;
+      m.on('load', async () => {
+        await Promise.all(SOURCE_KEYS.map((key) => loadSourceData(key)));
+        addAllLayers(m);
+      });
 
-      const features = m.queryRenderedFeatures(e.point, { layers: pointLayers });
-
-      if (features.length > 0) {
-        const feature = features[0];
-        const props = feature.properties;
-        if (props?.id) {
-          setSelectedStationId(props.id);
-        }
-      }
-    });
-
-    // Change cursor on hover for ALL point layers
-    for (const sourceKey of SOURCE_KEYS) {
-      m.on('mouseenter', `${sourceKey}-points`, () => { m.getCanvas().style.cursor = 'pointer'; });
-      m.on('mouseleave', `${sourceKey}-points`, () => { m.getCanvas().style.cursor = ''; });
-    }
-
-    // Cluster click-to-zoom
-    for (const sourceKey of SOURCE_KEYS) {
-      m.on('click', `${sourceKey}-clusters`, (e) => {
-        const features = m.queryRenderedFeatures(e.point, { layers: [`${sourceKey}-clusters`] });
-        if (!features.length) return;
-        const clusterId = features[0].properties?.cluster_id;
-        const source = m.getSource(sourceKey) as maplibregl.GeoJSONSource;
-        if (source && clusterId !== undefined) {
-          source.getClusterExpansionZoom(clusterId).then((zoom) => {
-            const geometry = features[0].geometry;
-            if (geometry.type === 'Point') {
-              m.easeTo({ center: geometry.coordinates as [number, number], zoom });
-            }
-          });
+      m.on('click', (e) => {
+        const pointLayers = SOURCE_KEYS.map((key) => `${key}-points`).filter((id) => m.getLayer(id));
+        if (pointLayers.length === 0) return;
+        const features = m.queryRenderedFeatures(e.point, { layers: pointLayers });
+        if (features.length > 0) {
+          const props = features[0].properties;
+          if (props?.id) setSelectedStationId(props.id);
         }
       });
-    }
 
-    // Sync map state back to store
-    m.on('moveend', () => {
-      if (isMovingProgrammatically.current) {
-        isMovingProgrammatically.current = false;
-        return;
+      for (const sourceKey of SOURCE_KEYS) {
+        m.on('mouseenter', `${sourceKey}-points`, () => { m.getCanvas().style.cursor = 'pointer'; });
+        m.on('mouseleave', `${sourceKey}-points`, () => { m.getCanvas().style.cursor = ''; });
       }
-      const c = m.getCenter();
-      const z = m.getZoom();
-      useMapStore.getState().setViewport({
-        center: [c.lng, c.lat],
-        zoom: z,
-      });
-    });
 
-    map.current = m;
+      for (const sourceKey of SOURCE_KEYS) {
+        m.on('click', `${sourceKey}-clusters`, (e) => {
+          const features = m.queryRenderedFeatures(e.point, { layers: [`${sourceKey}-clusters`] });
+          if (!features.length) return;
+          const clusterId = features[0].properties?.cluster_id;
+          const source = m.getSource(sourceKey) as maplibregl.GeoJSONSource;
+          if (source && clusterId !== undefined) {
+            source.getClusterExpansionZoom(clusterId).then((zoom) => {
+              const geometry = features[0].geometry;
+              if (geometry.type === 'Point') {
+                m.easeTo({ center: geometry.coordinates as [number, number], zoom });
+              }
+            });
+          }
+        });
+      }
+
+      m.on('moveend', () => {
+        if (isMovingProgrammatically.current) {
+          isMovingProgrammatically.current = false;
+          return;
+        }
+        const c = m.getCenter();
+        const z = m.getZoom();
+        useMapStore.getState().setViewport({
+          center: [c.lng, c.lat],
+          zoom: z,
+        });
+      });
+
+      map.current = m;
+    };
+
+    initMap();
 
     return () => {
+      cancelled = true;
       if (map.current) {
         map.current.remove();
         map.current = null;
@@ -260,9 +260,11 @@ export default function MapContainer() {
     }
     const m = map.current;
     if (!m) return;
-    m.setStyle(getMapStyleUrl(mapStyle));
-    m.once('style.load', () => {
-      addAllLayers(m);
+    fetchMapStyle(mapStyle).then((style) => {
+      m.setStyle(style);
+      m.once('style.load', () => {
+        addAllLayers(m);
+      });
     });
   }, [mapStyle, addAllLayers]);
 
