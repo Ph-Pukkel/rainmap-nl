@@ -3,7 +3,7 @@ export const DEFAULT_ZOOM = 7;
 
 // Map styles are defined in src/lib/map/styles.ts (with free-tile fallback).
 // Re-export for backwards compatibility.
-export { MAP_STYLES, getMapStyleUrl } from '@/lib/map/styles';
+export { MAP_STYLES } from '@/lib/map/styles';
 export type { MapStyleKey } from '@/lib/map/styles';
 
 export const CLUSTER_CONFIG: Record<string, { cluster: boolean; clusterMaxZoom: number; clusterRadius: number }> = {
