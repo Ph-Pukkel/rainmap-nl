@@ -20,6 +20,7 @@ export default function MapContainer() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const isMovingProgrammatically = useRef(false);
+  const initialStyleRef = useRef(true);
 
   const { center, zoom, mapStyle } = useMapStore();
   const { activeLayers, setSourceError } = useLayerStore();
@@ -119,11 +120,13 @@ export default function MapContainer() {
   // Initialize map
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
+    let cancelled = false;
 
     // Validate MapTiler key before creating the map, fall back to free tiles if invalid
     const initMap = async () => {
       if (!mapContainer.current || map.current) return;
       await validateMapTilerKey();
+      if (cancelled || !mapContainer.current) return;
 
     const m = new maplibregl.Map({
       container: mapContainer.current,
@@ -145,10 +148,8 @@ export default function MapContainer() {
     );
 
     m.on('load', async () => {
-      // Load data for each source
-      for (const sourceKey of SOURCE_KEYS) {
-        await loadSourceData(sourceKey);
-      }
+      // Load all sources in parallel
+      await Promise.all(SOURCE_KEYS.map((key) => loadSourceData(key)));
       addAllLayers(m);
     });
 
@@ -212,6 +213,7 @@ export default function MapContainer() {
     initMap();
 
     return () => {
+      cancelled = true;
       if (map.current) {
         map.current.remove();
         map.current = null;
@@ -261,8 +263,12 @@ export default function MapContainer() {
     }
   }, [activeLayers]);
 
-  // Sync map style - re-add layers after style change
+  // Sync map style - re-add layers after style change (skip initial mount)
   useEffect(() => {
+    if (initialStyleRef.current) {
+      initialStyleRef.current = false;
+      return;
+    }
     const m = map.current;
     if (!m) return;
     m.setStyle(getMapStyleUrl(mapStyle));

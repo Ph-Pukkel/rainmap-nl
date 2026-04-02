@@ -1,19 +1,10 @@
 export const DEFAULT_CENTER: [number, number] = [5.2913, 52.1326];
 export const DEFAULT_ZOOM = 7;
 
-export const MAP_STYLES = {
-  standaard: 'https://api.maptiler.com/maps/streets-v2/style.json?key={key}',
-  licht: 'https://api.maptiler.com/maps/dataviz-light/style.json?key={key}',
-  donker: 'https://api.maptiler.com/maps/dataviz-dark/style.json?key={key}',
-  satelliet: 'https://api.maptiler.com/maps/hybrid/style.json?key={key}',
-} as const;
-
-export type MapStyleKey = keyof typeof MAP_STYLES;
-
-export function getMapStyleUrl(style: MapStyleKey): string {
-  const key = process.env.NEXT_PUBLIC_MAPTILER_API_KEY || '';
-  return MAP_STYLES[style].replace('{key}', key);
-}
+// Map styles are defined in src/lib/map/styles.ts (with free-tile fallback).
+// Re-export for backwards compatibility.
+export { MAP_STYLES, getMapStyleUrl } from '@/lib/map/styles';
+export type { MapStyleKey } from '@/lib/map/styles';
 
 export const CLUSTER_CONFIG: Record<string, { cluster: boolean; clusterMaxZoom: number; clusterRadius: number }> = {
   knmi_aws:      { cluster: false, clusterMaxZoom: 14, clusterRadius: 50 },
