@@ -15,32 +15,6 @@ const TYPE_LABELS: Record<SourceType, string> = {
 
 const TYPE_ORDER: SourceType[] = ['professioneel', 'vrijwilliger', 'consument'];
 
-function HeatmapToggle() {
-  const { heatmapEnabled, setHeatmapEnabled } = useLayerStore();
-  return (
-    <div>
-      <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-        Overlays
-      </h3>
-      <button
-        onClick={() => setHeatmapEnabled(!heatmapEnabled)}
-        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-          heatmapEnabled
-            ? 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800'
-            : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
-        }`}
-      >
-        <div className={`w-4 h-4 rounded flex items-center justify-center text-xs ${
-          heatmapEnabled ? 'bg-blue-500 text-white' : 'bg-gray-300 dark:bg-gray-600'
-        }`}>
-          {heatmapEnabled && '✓'}
-        </div>
-        <span className="text-sm text-gray-700 dark:text-gray-300">Dichtheids-heatmap</span>
-      </button>
-    </div>
-  );
-}
-
 export default function LayerControl() {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +73,6 @@ export default function LayerControl() {
           </div>
         </div>
       ))}
-      <HeatmapToggle />
     </div>
   );
 }

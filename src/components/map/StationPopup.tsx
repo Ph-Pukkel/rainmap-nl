@@ -94,6 +94,12 @@ export default function StationPopup() {
                 <span className="text-gray-900 dark:text-white">{station.operator}</span>
               </div>
             )}
+            {typeof station.metadata?.buienradar_naam === 'string' && station.metadata.buienradar_naam !== station.name && (
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Buienradar</span>
+                <span className="text-gray-900 dark:text-white">{station.metadata.buienradar_naam}</span>
+              </div>
+            )}
             {station.sensor_type && (
               <div className="flex justify-between">
                 <span className="text-gray-500 dark:text-gray-400">Type sensor</span>
@@ -168,7 +174,7 @@ export default function StationPopup() {
               Street View
             </a>
             <a
-              href={`https://www.google.com/maps/@${station.latitude},${station.longitude},17z/data=!3m1!1e1`}
+              href={`https://maps.google.com/maps?t=k&q=${station.latitude},${station.longitude}&z=17`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"

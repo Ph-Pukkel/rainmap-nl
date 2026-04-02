@@ -14,7 +14,6 @@ function parseUrlParams(): {
   z?: number;
   lagen?: string[];
   stijl?: MapStyleKey;
-  heatmap?: boolean;
   station?: string;
 } {
   if (typeof window === 'undefined') return {};
@@ -27,7 +26,6 @@ function parseUrlParams(): {
   const z = params.get('z');
   const lagen = params.get('lagen');
   const stijl = params.get('stijl');
-  const heatmap = params.get('heatmap');
   const station = params.get('station');
 
   if (lat && lng) {
@@ -54,10 +52,6 @@ function parseUrlParams(): {
     result.stijl = stijl as MapStyleKey;
   }
 
-  if (heatmap) {
-    result.heatmap = heatmap === '1';
-  }
-
   if (station) {
     result.station = station;
   }
@@ -70,7 +64,7 @@ export function useUrlState() {
   const initializedRef = useRef(false);
 
   const { center, zoom, mapStyle, setViewport, setMapStyle } = useMapStore();
-  const { activeLayers, setLayerActive, setHeatmapEnabled, heatmapEnabled } = useLayerStore();
+  const { activeLayers, setLayerActive } = useLayerStore();
   const { selectedStationId, setSelectedStationId } = useUIStore();
 
   // Initialize stores from URL on mount
@@ -101,10 +95,6 @@ export function useUrlState() {
       }
     }
 
-    if (params.heatmap !== undefined) {
-      setHeatmapEnabled(params.heatmap);
-    }
-
     if (params.station) {
       setSelectedStationId(params.station);
     }
@@ -131,10 +121,6 @@ export function useUrlState() {
         params.set('stijl', mapStyle);
       }
 
-      if (heatmapEnabled) {
-        params.set('heatmap', '1');
-      }
-
       if (selectedStationId) {
         params.set('station', selectedStationId);
       }
@@ -144,5 +130,5 @@ export function useUrlState() {
     }, 500);
 
     return () => clearTimeout(debounceRef.current);
-  }, [center, zoom, mapStyle, activeLayers, heatmapEnabled, selectedStationId]);
+  }, [center, zoom, mapStyle, activeLayers, selectedStationId]);
 }

@@ -209,6 +209,7 @@ async function fetchBuienradarLive(): Promise<Map<number, BuienradarMeasurement>
     const measurements: BuienradarMeasurement[] = json?.actual?.stationmeasurements || [];
     for (const m of measurements) {
       // Buienradar stationid 6240 -> KNMI code 240
+      // These are the SAME physical stations; Buienradar rounds coords to 2 decimals
       const knmiCode = m.stationid - 6000;
       if (knmiCode > 0 && knmiCode < 1000) {
         map.set(knmiCode, m);
@@ -241,8 +242,11 @@ async function fetchKNMIAWSStations(): Promise<StationRecord[]> {
       metadata: {
         station_code: s.code,
         wmo_code: `06${String(s.code).padStart(3, '0')}`,
-        google_maps_satellite: `https://www.google.com/maps/@${s.lat},${s.lon},17z/data=!3m1!1e1`,
+        google_maps_satellite: `https://maps.google.com/maps?t=k&q=${s.lat},${s.lon}&z=17`,
         google_streetview: `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${s.lat},${s.lon}`,
+        // Buienradar uses the same stations with stationid = 6000 + KNMI code
+        buienradar_stationid: 6000 + s.code,
+        ...(live ? { buienradar_naam: live.stationname.replace(/^Meetstation\s+/i, '') } : {}),
       },
     };
 

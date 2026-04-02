@@ -10,12 +10,10 @@ interface SourceError {
 interface LayerState {
   activeLayers: Set<string>;
   filterMode: FilterMode;
-  heatmapEnabled: boolean;
   sourceErrors: Record<string, SourceError>;
   toggleLayer: (sourceKey: string) => void;
   setLayerActive: (sourceKey: string, active: boolean) => void;
   setFilterMode: (mode: FilterMode) => void;
-  setHeatmapEnabled: (enabled: boolean) => void;
   setSourceError: (sourceKey: string, message: string) => void;
   clearSourceError: (sourceKey: string) => void;
   isLayerActive: (sourceKey: string) => boolean;
@@ -23,16 +21,12 @@ interface LayerState {
 
 const DEFAULT_ACTIVE_LAYERS = new Set([
   'knmi_aws',
-  'knmi_neerslag',
-  'rws_waterinfo',
   'waterschappen',
-  'wow_nl',
 ]);
 
 export const useLayerStore = create<LayerState>((set, get) => ({
   activeLayers: new Set(DEFAULT_ACTIVE_LAYERS),
   filterMode: 'alle',
-  heatmapEnabled: false,
   sourceErrors: {},
   toggleLayer: (sourceKey) =>
     set((state) => {
@@ -55,7 +49,6 @@ export const useLayerStore = create<LayerState>((set, get) => ({
       return { activeLayers: next };
     }),
   setFilterMode: (filterMode) => set({ filterMode }),
-  setHeatmapEnabled: (heatmapEnabled) => set({ heatmapEnabled }),
   setSourceError: (sourceKey, message) =>
     set((state) => ({
       sourceErrors: {
