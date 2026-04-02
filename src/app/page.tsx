@@ -7,6 +7,7 @@ import StationPopup from '@/components/map/StationPopup';
 import MapControls from '@/components/map/MapControls';
 import BasemapSwitcher from '@/components/map/BasemapSwitcher';
 import { useUrlState } from '@/hooks/useUrlState';
+import { usePageTracking } from '@/hooks/usePageTracking';
 import { useUIStore } from '@/store/uiStore';
 
 const MapContainer = dynamic(() => import('@/components/map/MapContainer'), {
@@ -23,6 +24,7 @@ const MapContainer = dynamic(() => import('@/components/map/MapContainer'), {
 
 export default function HomePage() {
   useUrlState();
+  usePageTracking();
   const { sidebarOpen, setSidebarOpen } = useUIStore();
 
   return (

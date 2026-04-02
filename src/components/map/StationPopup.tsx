@@ -106,6 +106,12 @@ export default function StationPopup() {
                 <span className="text-gray-900 dark:text-white">{station.sensor_type}</span>
               </div>
             )}
+            {typeof station.metadata?.station_type === 'string' && (
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Stationstype</span>
+                <span className="text-gray-900 dark:text-white capitalize">{station.metadata.station_type}</span>
+              </div>
+            )}
             {station.municipality && (
               <div className="flex justify-between">
                 <span className="text-gray-500 dark:text-gray-400">Gemeente</span>
@@ -159,6 +165,18 @@ export default function StationPopup() {
               <p className="text-sm text-gray-400">Geen recente meetdata beschikbaar</p>
             )}
           </div>
+
+          {/* Station photo */}
+          {typeof station.metadata?.photo_url === 'string' && (
+            <div className="mb-3 rounded-lg overflow-hidden">
+              <img
+                src={station.metadata.photo_url}
+                alt={`Weerstation ${station.name}`}
+                className="w-full h-32 object-cover"
+                loading="lazy"
+              />
+            </div>
+          )}
 
           {/* Google Maps links */}
           <div className="flex gap-2 mb-3">
