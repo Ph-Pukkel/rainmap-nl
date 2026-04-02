@@ -41,10 +41,13 @@ export async function validateMapTilerKey(): Promise<boolean> {
   }
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
     const resp = await fetch(
       `https://api.maptiler.com/maps/streets-v2/style.json?key=${key}`,
-      { method: 'HEAD' }
+      { method: 'HEAD', signal: controller.signal }
     );
+    clearTimeout(timeout);
     _maptilerKeyValid = resp.ok;
   } catch {
     _maptilerKeyValid = false;
