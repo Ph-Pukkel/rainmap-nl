@@ -114,11 +114,21 @@ async function runSync(sourceKey: string, fetchFn: () => Promise<StationRecord[]
 
 const SOURCE_KEY = 'waterschappen';
 
-const KNMI_DATASET = 'waterboard_raingauge_quality_controlled_all_combined';
+// Combined dataset + individual waterschap datasets not in the combined file
+const KNMI_DATASETS = [
+  'waterboard_raingauge_quality_controlled_all_combined',
+  'waterboard_raingauge_quality_controlled_dommel',
+  'waterboard_raingauge_quality_controlled_limburg',
+] as const;
 const KNMI_API_BASE = 'https://api.dataplatform.knmi.nl/open-data/v1';
 
 // Map location ID prefixes to waterschap operators
-function getOperator(locationId: string, name: string): string {
+function getOperator(locationId: string, _name: string, dataset: string): string {
+  // Stations from individual datasets are always that waterschap
+  if (dataset.includes('_dommel')) return 'Waterschap De Dommel';
+  if (dataset.includes('_limburg')) return 'Waterschap Limburg';
+
+  // Combined dataset — match by location ID pattern
   if (/^(020|094|097|180|239|249|448|462)-/.test(locationId)) return 'Hoogheemraadschap van Rijnland';
   if (/^65[01]\d$/.test(locationId)) return 'Hoogheemraadschap De Stichtse Rijnlanden';
   if (/^(meetlocatie_rgn|tcn_)/.test(locationId)) return 'Hoogheemraadschap van Delfland';
@@ -126,7 +136,7 @@ function getOperator(locationId: string, name: string): string {
   if (locationId.startsWith('nl33')) return "Waterschap Hunze en Aa's";
   if (locationId.startsWith('nl34')) return 'Waterschap Noorderzijlvest';
   if (locationId.startsWith('nrs_wdod')) return 'Waterschap Drents Overijsselse Delta';
-  if (locationId.startsWith('mpn')) return 'Waterschap Zuiderzeeland';
+  if (locationId.startsWith('mpn')) return 'Hoogheemraadschap Hollands Noorderkwartier';
   if (/^(rwzi_|p_|riool_gemaal_|rosmalen|nistelrode|mill|holthees|boxmeer|elshout|hutten_|peelse_|snelleloop)/.test(locationId)) return 'Waterschap Aa en Maas';
   if (locationId.startsWith('tml')) return 'Wetterskip Fryslân';
   return 'Waterschap (onbekend)';
@@ -135,23 +145,23 @@ function getOperator(locationId: string, name: string): string {
 // KNMI Data Platform API key (free, public registration)
 const KNMI_API_KEY_DEFAULT = 'eyJvcmciOiI1ZTU1NGUxOTI3NGE5NjAwMDEyYTNlYjEiLCJpZCI6ImYzYWQzMTQyZmEwYzQ5MTRiNDc5NmE4NjYxYjk4NDgzIiwiaCI6Im11cm11cjEyOCJ9';
 
-async function fetchLatestKNMIFile(): Promise<string> {
+async function fetchLatestKNMIFile(dataset: string): Promise<string> {
   const apiKey = Deno.env.get('KNMI_API_KEY') || KNMI_API_KEY_DEFAULT;
 
   // List most recent file
-  const listUrl = `${KNMI_API_BASE}/datasets/${KNMI_DATASET}/versions/1.0/files?maxKeys=1&orderBy=lastModified&sorting=desc`;
+  const listUrl = `${KNMI_API_BASE}/datasets/${dataset}/versions/1.0/files?maxKeys=1&orderBy=lastModified&sorting=desc`;
   const listResp = await fetch(listUrl, { headers: { Authorization: apiKey } });
-  if (!listResp.ok) throw new Error(`KNMI file list mislukt: ${listResp.status}`);
+  if (!listResp.ok) throw new Error(`KNMI file list mislukt voor ${dataset}: ${listResp.status}`);
   const listData = await listResp.json();
   const filename = listData.files?.[0]?.filename;
-  if (!filename) throw new Error('Geen KNMI bestanden gevonden');
-  console.log(`Nieuwste KNMI bestand: ${filename}`);
+  if (!filename) throw new Error(`Geen KNMI bestanden gevonden voor ${dataset}`);
+  console.log(`[${dataset}] Nieuwste bestand: ${filename}`);
 
   // Get temporary download URL
-  const urlResp = await fetch(`${KNMI_API_BASE}/datasets/${KNMI_DATASET}/versions/1.0/files/${filename}/url`, {
+  const urlResp = await fetch(`${KNMI_API_BASE}/datasets/${dataset}/versions/1.0/files/${filename}/url`, {
     headers: { Authorization: apiKey },
   });
-  if (!urlResp.ok) throw new Error(`KNMI download URL mislukt: ${urlResp.status}`);
+  if (!urlResp.ok) throw new Error(`KNMI download URL mislukt voor ${dataset}: ${urlResp.status}`);
   const urlData = await urlResp.json();
   return urlData.temporaryDownloadUrl;
 }
@@ -218,49 +228,60 @@ function parseKNMIXml(xml: string): ParsedStation[] {
 }
 
 async function fetchWaterschappenStations(): Promise<StationRecord[]> {
-  const downloadUrl = await fetchLatestKNMIFile();
-
-  console.log('XML downloaden van KNMI...');
-  const xmlResp = await fetch(downloadUrl);
-  if (!xmlResp.ok) throw new Error(`KNMI XML download mislukt: ${xmlResp.status}`);
-  const xml = await xmlResp.text();
-  console.log(`XML ontvangen: ${xml.length} bytes`);
-
-  const parsed = parseKNMIXml(xml);
-  console.log(`${parsed.length} unieke stations geparsed`);
-
   const allStations: StationRecord[] = [];
+  const seen = new Set<string>();
 
-  for (const station of parsed) {
-    // Skip coordinates outside Netherlands
-    if (station.lat < 50.5 || station.lat > 53.7 || station.lon < 3.0 || station.lon > 7.3) continue;
+  for (const dataset of KNMI_DATASETS) {
+    try {
+      const downloadUrl = await fetchLatestKNMIFile(dataset);
 
-    const operator = getOperator(station.locationId, station.name);
+      console.log(`[${dataset}] XML downloaden...`);
+      const xmlResp = await fetch(downloadUrl);
+      if (!xmlResp.ok) throw new Error(`XML download mislukt: ${xmlResp.status}`);
+      const xml = await xmlResp.text();
+      console.log(`[${dataset}] XML ontvangen: ${xml.length} bytes`);
 
-    allStations.push({
-      external_id: `knmi-ws-${station.locationId}`,
-      name: station.name,
-      latitude: station.lat,
-      longitude: station.lon,
-      operator,
-      sensor_type: 'rain_gauge',
-      metadata: {
-        knmi_location_id: station.locationId,
-        dataset: KNMI_DATASET,
-        organisation: operator,
-      },
-      ...(station.lastValue != null && station.lastTimestamp ? {
-        measurement: {
-          measured_at: station.lastTimestamp,
-          rainfall_mm: station.lastValue,
-          rainfall_period: '5min',
-          raw_data: {
+      const parsed = parseKNMIXml(xml);
+      console.log(`[${dataset}] ${parsed.length} unieke stations geparsed`);
+
+      for (const station of parsed) {
+        // Skip coordinates outside Netherlands
+        if (station.lat < 50.5 || station.lat > 53.7 || station.lon < 3.0 || station.lon > 7.3) continue;
+        // Skip duplicates across datasets
+        if (seen.has(station.locationId)) continue;
+        seen.add(station.locationId);
+
+        const operator = getOperator(station.locationId, station.name, dataset);
+
+        allStations.push({
+          external_id: `knmi-ws-${station.locationId}`,
+          name: station.name,
+          latitude: station.lat,
+          longitude: station.lon,
+          operator,
+          sensor_type: 'rain_gauge',
+          metadata: {
             knmi_location_id: station.locationId,
-            flag: station.flag,
+            dataset,
+            organisation: operator,
           },
-        },
-      } : {}),
-    });
+          ...(station.lastValue != null && station.lastTimestamp ? {
+            measurement: {
+              measured_at: station.lastTimestamp,
+              rainfall_mm: station.lastValue,
+              rainfall_period: '5min',
+              raw_data: {
+                knmi_location_id: station.locationId,
+                flag: station.flag,
+              },
+            },
+          } : {}),
+        });
+      }
+    } catch (err) {
+      console.error(`[${dataset}] Fout: ${err instanceof Error ? err.message : err}`);
+      // Continue with other datasets even if one fails
+    }
   }
 
   // Group counts per operator for logging
