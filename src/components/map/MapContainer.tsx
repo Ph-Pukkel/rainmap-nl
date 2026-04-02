@@ -6,7 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapStore } from '@/store/mapStore';
 import { useLayerStore } from '@/store/layerStore';
 import { useUIStore } from '@/store/uiStore';
-import { getMapStyleUrl, validateMapTilerKey } from '@/lib/map/styles';
+import { getMapStyleUrl } from '@/lib/map/styles';
 import { MARKER_CONFIGS } from '@/lib/map/markers';
 import { createGeoJSONSourceSpec } from '@/lib/map/clustering';
 import { supabase } from '@/lib/supabase/client';
@@ -120,13 +120,6 @@ export default function MapContainer() {
   // Initialize map
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
-    let cancelled = false;
-
-    // Validate MapTiler key before creating the map, fall back to free tiles if invalid
-    const initMap = async () => {
-      if (!mapContainer.current || map.current) return;
-      await validateMapTilerKey();
-      if (cancelled || !mapContainer.current) return;
 
     const m = new maplibregl.Map({
       container: mapContainer.current,
@@ -208,12 +201,8 @@ export default function MapContainer() {
     });
 
     map.current = m;
-    }; // end initMap
-
-    initMap();
 
     return () => {
-      cancelled = true;
       if (map.current) {
         map.current.remove();
         map.current = null;
