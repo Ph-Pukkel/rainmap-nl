@@ -186,63 +186,86 @@ async function getKNMIApiKey(): Promise<string> {
   return data?.api_key || Deno.env.get('KNMI_API_KEY') || '';
 }
 
-async function fetchKNMIAWSStations(): Promise<StationRecord[]> {
-  const apiKey = await getKNMIApiKey();
+// Buienradar JSON feed provides live measurements for KNMI AWS stations.
+// Buienradar stationid = 6000 + KNMI station code (e.g. 6240 = KNMI 240 = Schiphol).
+const BUIENRADAR_URL = 'https://data.buienradar.nl/2.0/feed/json';
 
-  // Convert hardcoded stations to StationRecord format
-  const stations: StationRecord[] = KNMI_AWS_STATIONS.map((s) => ({
-    external_id: String(s.code),
-    name: s.name,
-    latitude: s.lat,
-    longitude: s.lon,
-    municipality: s.municipality,
-    province: s.province,
-    operator: 'KNMI',
-    sensor_type: 'Automatisch weerstation',
-    elevation_m: s.elevation_m,
-    metadata: {
-      station_code: s.code,
-      data_note: 'Stationslocaties zijn hardcoded; KNMI levert meetdata nu in NetCDF-formaat via de 10-minute-in-situ-meteorological-observations dataset.',
-    },
-  }));
+interface BuienradarMeasurement {
+  stationid: number;
+  stationname: string;
+  temperature: number | null;
+  rainFallLastHour: number | null;
+  rainFallLast24Hour: number | null;
+  timestamp: string;
+  [key: string]: unknown;
+}
 
-  // Attempt to fetch the latest 10-min observations file listing to record
-  // the most recent timestamp, even though we cannot parse the NetCDF data.
-  if (apiKey) {
-    try {
-      const listUrl =
-        'https://api.dataplatform.knmi.nl/open-data/v1/datasets/10-minute-in-situ-meteorological-observations/versions/1.0/files?maxKeys=1&sorting=desc&orderBy=lastModified';
-      const listResp = await fetch(listUrl, {
-        headers: { Authorization: apiKey },
-      });
-      if (listResp.ok) {
-        const listData = await listResp.json();
-        const files = listData.files || [];
-        if (files.length > 0) {
-          const latestFilename = files[0].filename as string;
-          // Extract timestamp from filename like KMDS__OPER_P___10M_OBS_L2_202604010000.nc
-          const tsMatch = latestFilename.match(/(\d{12})\.nc$/);
-          const latestTimestamp = tsMatch ? tsMatch[1] : null;
-          console.log(`KNMI AWS: laatste bestand = ${latestFilename}`);
-
-          // Attach metadata about latest available data to all stations
-          for (const station of stations) {
-            station.metadata = {
-              ...station.metadata,
-              latest_netcdf_file: latestFilename,
-              latest_data_timestamp: latestTimestamp,
-            };
-          }
-        }
-      } else {
-        console.log(`KNMI API bestandslijst fout: ${listResp.status} (niet-kritiek, stations worden alsnog gesynchroniseerd)`);
+async function fetchBuienradarLive(): Promise<Map<number, BuienradarMeasurement>> {
+  const map = new Map<number, BuienradarMeasurement>();
+  try {
+    const resp = await fetch(BUIENRADAR_URL);
+    if (!resp.ok) return map;
+    const json = await resp.json();
+    const measurements: BuienradarMeasurement[] = json?.actual?.stationmeasurements || [];
+    for (const m of measurements) {
+      // Buienradar stationid 6240 -> KNMI code 240
+      const knmiCode = m.stationid - 6000;
+      if (knmiCode > 0 && knmiCode < 1000) {
+        map.set(knmiCode, m);
       }
-    } catch (err) {
-      console.log(`KNMI API bestandslijst ophalen mislukt: ${(err as Error).message} (niet-kritiek)`);
     }
+    console.log(`Buienradar: ${map.size} live metingen opgehaald voor KNMI stations`);
+  } catch (err) {
+    console.warn(`Buienradar ophalen mislukt: ${(err as Error).message}`);
   }
+  return map;
+}
 
-  console.log(`KNMI AWS: ${stations.length} stations opgehaald (hardcoded locaties)`);
+async function fetchKNMIAWSStations(): Promise<StationRecord[]> {
+  // Fetch live Buienradar data to enrich KNMI stations
+  const liveData = await fetchBuienradarLive();
+
+  const stations: StationRecord[] = KNMI_AWS_STATIONS.map((s) => {
+    const live = liveData.get(s.code);
+
+    const record: StationRecord = {
+      external_id: String(s.code),
+      name: s.name,
+      latitude: s.lat,
+      longitude: s.lon,
+      municipality: s.municipality,
+      province: s.province,
+      operator: 'KNMI',
+      sensor_type: 'Automatisch weerstation',
+      elevation_m: s.elevation_m,
+      metadata: {
+        station_code: s.code,
+        wmo_code: `06${String(s.code).padStart(3, '0')}`,
+        google_maps_satellite: `https://www.google.com/maps/@${s.lat},${s.lon},17z/data=!3m1!1e1`,
+        google_streetview: `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${s.lat},${s.lon}`,
+      },
+    };
+
+    // Add live measurement from Buienradar if available
+    if (live) {
+      record.measurement = {
+        measured_at: live.timestamp,
+        rainfall_mm: live.rainFallLastHour ?? undefined,
+        rainfall_period: '1h',
+        temperature_c: live.temperature ?? undefined,
+        raw_data: {
+          buienradar_stationid: live.stationid,
+          rainFallLast24Hour: live.rainFallLast24Hour,
+          source: 'buienradar',
+        },
+      };
+    }
+
+    return record;
+  });
+
+  const withData = stations.filter((s) => s.measurement).length;
+  console.log(`KNMI AWS: ${stations.length} stations, ${withData} met actuele meetdata via Buienradar`);
   return stations;
 }
 

@@ -154,6 +154,37 @@ export default function StationPopup() {
             )}
           </div>
 
+          {/* Google Maps links */}
+          <div className="flex gap-2 mb-3">
+            <a
+              href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${station.latitude},${station.longitude}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+              </svg>
+              Street View
+            </a>
+            <a
+              href={`https://www.google.com/maps/@${station.latitude},${station.longitude},17z/data=!3m1!1e1`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
+              </svg>
+              Satelliet
+            </a>
+          </div>
+
+          {/* Coordinates */}
+          <div className="text-xs text-gray-400 mb-3">
+            {station.latitude.toFixed(4)}°N, {station.longitude.toFixed(4)}°E
+          </div>
+
           {/* Link to source */}
           <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
             <span className="text-xs text-gray-400">
