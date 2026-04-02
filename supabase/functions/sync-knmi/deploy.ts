@@ -111,12 +111,9 @@ const SOURCE_KEY_AWS = 'knmi_aws';
 const SOURCE_KEY_NEERSLAG = 'knmi_neerslag';
 
 // All KNMI automated weather stations (AWS) with their official coordinates.
-// Source: KNMI stationslijst (https://www.knmi.nl/over-het-knmi/about/meteo-data)
-// These locations are stable and rarely change.
-// Official KNMI AWS station coordinates, verified 2026-04-02 from:
-// - KNMI daggegevens API (daggegevens.knmi.nl/klimatologie/daggegevens)
-// - KNMI AWS metadata CSV (cdn.knmi.nl/.../AWS_stationsmetadata.csv)
-// - Buienradar JSON feed cross-reference
+// Coordinates from KNMI INSPIRE WFS (6-decimal precision, sub-meter accuracy)
+// via Nationaal GeoRegister: nationaalgeoregister.nl/geonetwork/srv/api/records/1e01d173-96f4-40b1-8236-c6a9cfdac252
+// Fallback to KNMI daggegevens API (3-decimal) for stations not in WFS.
 // Photo URLs verified from Wikimedia Commons, KNMI.nl, and other public sources.
 const KNMI_AWS_STATIONS: Array<{
   code: number;
@@ -130,57 +127,60 @@ const KNMI_AWS_STATIONS: Array<{
   buienradar_naam?: string;
   station_type?: string;
 }> = [
-  // --- Land-based full meteo stations ---
+  // --- Land-based full meteo stations (WFS precision where available) ---
   { code: 210, name: 'Valkenburg', lat: 52.171, lon: 4.430, elevation_m: -0.2, municipality: 'Katwijk', province: 'Zuid-Holland', station_type: 'meteo', buienradar_naam: undefined /* niet in Buienradar, vervangen door 215 */ },
-  { code: 215, name: 'Voorschoten', lat: 52.141, lon: 4.437, elevation_m: -1.1, municipality: 'Voorschoten', province: 'Zuid-Holland', station_type: 'meteo', photo_url: 'https://cdn.knmi.nl/system/bloxy/images/images/000/001/070/xlarge/120372.jpeg' },
-  { code: 225, name: 'IJmuiden', lat: 52.463, lon: 4.555, elevation_m: 4.4, municipality: 'Velsen', province: 'Noord-Holland', station_type: 'meteo' },
-  { code: 235, name: 'De Kooy Airport', lat: 52.928, lon: 4.781, elevation_m: 1.2, municipality: 'Den Helder', province: 'Noord-Holland', station_type: 'aerodrome', buienradar_naam: 'Den Helder' },
-  { code: 240, name: 'Schiphol Airport', lat: 52.318, lon: 4.790, elevation_m: -3.3, municipality: 'Haarlemmermeer', province: 'Noord-Holland', station_type: 'aerodrome' },
-  { code: 242, name: 'Vlieland Vliehors', lat: 53.241, lon: 4.921, elevation_m: 10.8, municipality: 'Vlieland', province: 'Friesland', station_type: 'meteo' },
-  { code: 248, name: 'Wijdenes', lat: 52.634, lon: 5.174, elevation_m: 0.8, municipality: 'Drechterland', province: 'Noord-Holland', station_type: 'meteo' },
-  { code: 249, name: 'Berkhout', lat: 52.644, lon: 4.979, elevation_m: -2.4, municipality: 'Koggenland', province: 'Noord-Holland', station_type: 'meteo' },
-  { code: 251, name: 'Hoorn Terschelling', lat: 53.392, lon: 5.346, elevation_m: 0.7, municipality: 'Terschelling', province: 'Friesland', station_type: 'meteo' },
-  { code: 257, name: 'Wijk aan Zee', lat: 52.506, lon: 4.603, elevation_m: 8.5, municipality: 'Beverwijk', province: 'Noord-Holland', station_type: 'meteo' },
-  { code: 260, name: 'De Bilt', lat: 52.100, lon: 5.180, elevation_m: 1.9, municipality: 'De Bilt', province: 'Utrecht', station_type: 'meteo', photo_url: 'https://cdn.knmi.nl/knmi/map/page/weer/actueel-weer/webcam/webcam.jpg' },
+  { code: 215, name: 'Voorschoten', lat: 52.139722, lon: 4.436389, elevation_m: -1.1, municipality: 'Voorschoten', province: 'Zuid-Holland', station_type: 'meteo', photo_url: 'https://cdn.knmi.nl/system/bloxy/images/images/000/001/070/xlarge/120372.jpeg' },
+  { code: 225, name: 'IJmuiden', lat: 52.462243, lon: 4.554901, elevation_m: 4.4, municipality: 'Velsen', province: 'Noord-Holland', station_type: 'wind' },
+  { code: 235, name: 'De Kooy Airport', lat: 52.926865, lon: 4.781145, elevation_m: 1.2, municipality: 'Den Helder', province: 'Noord-Holland', station_type: 'aerodrome', buienradar_naam: 'Den Helder' },
+  { code: 240, name: 'Schiphol Airport', lat: 52.315408, lon: 4.790223, elevation_m: -3.3, municipality: 'Haarlemmermeer', province: 'Noord-Holland', station_type: 'aerodrome' },
+  { code: 242, name: 'Vlieland Vliehors', lat: 53.240027, lon: 4.920791, elevation_m: 10.8, municipality: 'Vlieland', province: 'Friesland', station_type: 'meteo' },
+  { code: 248, name: 'Wijdenes', lat: 52.632431, lon: 5.173474, elevation_m: 0.8, municipality: 'Drechterland', province: 'Noord-Holland', station_type: 'wind' },
+  { code: 249, name: 'Berkhout', lat: 52.642697, lon: 4.978757, elevation_m: -2.4, municipality: 'Koggenland', province: 'Noord-Holland', station_type: 'meteo' },
+  { code: 251, name: 'Hoorn Terschelling', lat: 53.391266, lon: 5.345801, elevation_m: 0.7, municipality: 'Terschelling', province: 'Friesland', station_type: 'meteo' },
+  { code: 257, name: 'Wijk aan Zee', lat: 52.505334, lon: 4.602930, elevation_m: 8.5, municipality: 'Beverwijk', province: 'Noord-Holland', station_type: 'meteo' },
+  { code: 260, name: 'De Bilt', lat: 52.098822, lon: 5.179706, elevation_m: 1.9, municipality: 'De Bilt', province: 'Utrecht', station_type: 'meteo', photo_url: 'https://cdn.knmi.nl/knmi/map/page/weer/actueel-weer/webcam/webcam.jpg' },
   { code: 265, name: 'Soesterberg', lat: 52.130, lon: 5.274, elevation_m: 13.9, municipality: 'Soest', province: 'Utrecht', station_type: 'meteo' },
-  { code: 267, name: 'Stavoren', lat: 52.898, lon: 5.384, elevation_m: -1.3, municipality: 'Sudwest-Fryslan', province: 'Friesland', station_type: 'meteo', photo_url: 'https://upload.wikimedia.org/wikipedia/commons/d/d2/20180719_Weerstation_KNMI_Stavoren.jpg' },
-  { code: 269, name: 'Lelystad Airport', lat: 52.458, lon: 5.520, elevation_m: -3.7, municipality: 'Lelystad', province: 'Flevoland', station_type: 'aerodrome' },
-  { code: 270, name: 'Leeuwarden Airport', lat: 53.224, lon: 5.752, elevation_m: 1.2, municipality: 'Leeuwarden', province: 'Friesland', station_type: 'aerodrome' },
-  { code: 273, name: 'Marknesse', lat: 52.703, lon: 5.888, elevation_m: -3.3, municipality: 'Noordoostpolder', province: 'Flevoland', station_type: 'meteo' },
-  { code: 275, name: 'Deelen Airport', lat: 52.056, lon: 5.873, elevation_m: 48.2, municipality: 'Ede', province: 'Gelderland', station_type: 'aerodrome', buienradar_naam: 'Arnhem' },
-  { code: 277, name: 'Lauwersoog', lat: 53.413, lon: 6.200, elevation_m: 2.9, municipality: 'Het Hogeland', province: 'Groningen', station_type: 'meteo' },
-  { code: 278, name: 'Heino', lat: 52.435, lon: 6.259, elevation_m: 3.6, municipality: 'Raalte', province: 'Overijssel', station_type: 'meteo' },
-  { code: 279, name: 'Hoogeveen', lat: 52.750, lon: 6.574, elevation_m: 15.8, municipality: 'Hoogeveen', province: 'Drenthe', station_type: 'meteo' },
-  { code: 280, name: 'Groningen Airport Eelde', lat: 53.125, lon: 6.585, elevation_m: 5.2, municipality: 'Tynaarlo', province: 'Drenthe', station_type: 'aerodrome', buienradar_naam: 'Groningen' },
-  { code: 283, name: 'Hupsel', lat: 52.069, lon: 6.657, elevation_m: 29.1, municipality: 'Berkelland', province: 'Gelderland', station_type: 'meteo', buienradar_naam: 'Groenlo-Hupsel' },
-  { code: 286, name: 'Nieuw Beerta', lat: 53.196, lon: 7.150, elevation_m: -0.2, municipality: 'Oldambt', province: 'Groningen', station_type: 'meteo', photo_url: 'https://upload.wikimedia.org/wikipedia/commons/6/68/Weerstation_Nieuw_Beerta.jpg' },
-  { code: 290, name: 'Twenthe Airport', lat: 52.274, lon: 6.891, elevation_m: 34.8, municipality: 'Enschede', province: 'Overijssel', station_type: 'aerodrome', buienradar_naam: 'Twente' },
-  { code: 310, name: 'Vlissingen', lat: 51.442, lon: 3.596, elevation_m: 8.0, municipality: 'Vlissingen', province: 'Zeeland', station_type: 'meteo' },
-  { code: 319, name: 'Westdorpe', lat: 51.226, lon: 3.861, elevation_m: 1.7, municipality: 'Terneuzen', province: 'Zeeland', station_type: 'meteo' },
-  { code: 323, name: 'Wilhelminadorp', lat: 51.527, lon: 3.884, elevation_m: 1.4, municipality: 'Goes', province: 'Zeeland', station_type: 'meteo', buienradar_naam: 'Goes' },
-  { code: 330, name: 'Hoek van Holland', lat: 51.992, lon: 4.122, elevation_m: 11.9, municipality: 'Rotterdam', province: 'Zuid-Holland', station_type: 'meteo' },
-  { code: 340, name: 'Woensdrecht Airport', lat: 51.449, lon: 4.342, elevation_m: 19.2, municipality: 'Woensdrecht', province: 'Noord-Brabant', station_type: 'aerodrome' },
-  { code: 343, name: 'Rotterdam Geulhaven', lat: 51.893, lon: 4.313, elevation_m: 3.5, municipality: 'Rotterdam', province: 'Zuid-Holland', station_type: 'wind' },
-  { code: 344, name: 'Rotterdam Airport', lat: 51.962, lon: 4.447, elevation_m: -4.3, municipality: 'Rotterdam', province: 'Zuid-Holland', station_type: 'aerodrome' },
-  { code: 348, name: 'Cabauw', lat: 51.970, lon: 4.926, elevation_m: -0.7, municipality: 'Lopik', province: 'Utrecht', station_type: 'meteo', buienradar_naam: 'Lopik-Cabauw' },
-  { code: 350, name: 'Gilze-Rijen Airport', lat: 51.566, lon: 4.936, elevation_m: 14.9, municipality: 'Gilze en Rijen', province: 'Noord-Brabant', station_type: 'aerodrome', buienradar_naam: 'Gilze Rijen' },
-  { code: 356, name: 'Herwijnen', lat: 51.859, lon: 5.146, elevation_m: 0.7, municipality: 'West Betuwe', province: 'Gelderland', station_type: 'meteo' },
+  { code: 267, name: 'Stavoren', lat: 52.896644, lon: 5.383479, elevation_m: -1.3, municipality: 'Sudwest-Fryslan', province: 'Friesland', station_type: 'meteo', photo_url: 'https://upload.wikimedia.org/wikipedia/commons/d/d2/20180719_Weerstation_KNMI_Stavoren.jpg' },
+  { code: 269, name: 'Lelystad Airport', lat: 52.457270, lon: 5.519632, elevation_m: -3.7, municipality: 'Lelystad', province: 'Flevoland', station_type: 'aerodrome' },
+  { code: 270, name: 'Leeuwarden Airport', lat: 53.223000, lon: 5.751574, elevation_m: 1.2, municipality: 'Leeuwarden', province: 'Friesland', station_type: 'aerodrome' },
+  { code: 273, name: 'Marknesse', lat: 52.701902, lon: 5.887446, elevation_m: -3.3, municipality: 'Noordoostpolder', province: 'Flevoland', station_type: 'meteo' },
+  { code: 275, name: 'Deelen Airport', lat: 52.054862, lon: 5.872323, elevation_m: 48.2, municipality: 'Ede', province: 'Gelderland', station_type: 'aerodrome', buienradar_naam: 'Arnhem' },
+  { code: 277, name: 'Lauwersoog', lat: 53.411581, lon: 6.199099, elevation_m: 2.9, municipality: 'Het Hogeland', province: 'Groningen', station_type: 'meteo' },
+  { code: 278, name: 'Heino', lat: 52.434562, lon: 6.258977, elevation_m: 3.6, municipality: 'Raalte', province: 'Overijssel', station_type: 'meteo' },
+  { code: 279, name: 'Hoogeveen', lat: 52.749056, lon: 6.572970, elevation_m: 15.8, municipality: 'Hoogeveen', province: 'Drenthe', station_type: 'meteo' },
+  { code: 280, name: 'Groningen Airport Eelde', lat: 53.123676, lon: 6.584847, elevation_m: 5.2, municipality: 'Tynaarlo', province: 'Drenthe', station_type: 'aerodrome', buienradar_naam: 'Groningen' },
+  { code: 283, name: 'Hupsel', lat: 52.067534, lon: 6.656725, elevation_m: 29.1, municipality: 'Berkelland', province: 'Gelderland', station_type: 'meteo', buienradar_naam: 'Groenlo-Hupsel' },
+  { code: 286, name: 'Nieuw Beerta', lat: 53.194410, lon: 7.149322, elevation_m: -0.2, municipality: 'Oldambt', province: 'Groningen', station_type: 'meteo', photo_url: 'https://upload.wikimedia.org/wikipedia/commons/6/68/Weerstation_Nieuw_Beerta.jpg' },
+  { code: 290, name: 'Twenthe Airport', lat: 52.273148, lon: 6.890875, elevation_m: 34.8, municipality: 'Enschede', province: 'Overijssel', station_type: 'aerodrome', buienradar_naam: 'Twente' },
+  { code: 310, name: 'Vlissingen', lat: 51.441334, lon: 3.595824, elevation_m: 8.0, municipality: 'Vlissingen', province: 'Zeeland', station_type: 'meteo' },
+  { code: 319, name: 'Westdorpe', lat: 51.224758, lon: 3.860966, elevation_m: 1.7, municipality: 'Terneuzen', province: 'Zeeland', station_type: 'meteo' },
+  { code: 323, name: 'Wilhelminadorp', lat: 51.525957, lon: 3.883534, elevation_m: 1.4, municipality: 'Goes', province: 'Zeeland', station_type: 'meteo', buienradar_naam: 'Goes' },
+  { code: 330, name: 'Hoek van Holland', lat: 51.990942, lon: 4.121850, elevation_m: 11.9, municipality: 'Rotterdam', province: 'Zuid-Holland', station_type: 'meteo' },
+  { code: 340, name: 'Woensdrecht Airport', lat: 51.447744, lon: 4.342014, elevation_m: 19.2, municipality: 'Woensdrecht', province: 'Noord-Brabant', station_type: 'aerodrome' },
+  { code: 343, name: 'Rotterdam Geulhaven', lat: 51.891831, lon: 4.312664, elevation_m: 3.5, municipality: 'Rotterdam', province: 'Zuid-Holland', station_type: 'wind' },
+  { code: 344, name: 'Rotterdam The Hague Airport', lat: 51.960667, lon: 4.446901, elevation_m: -4.3, municipality: 'Rotterdam', province: 'Zuid-Holland', station_type: 'aerodrome' },
+  { code: 348, name: 'Cabauw', lat: 51.969031, lon: 4.925922, elevation_m: -0.7, municipality: 'Lopik', province: 'Utrecht', station_type: 'meteo', buienradar_naam: 'Lopik-Cabauw' },
+  { code: 350, name: 'Gilze-Rijen Airport', lat: 51.564889, lon: 4.935239, elevation_m: 14.9, municipality: 'Gilze en Rijen', province: 'Noord-Brabant', station_type: 'aerodrome', buienradar_naam: 'Gilze Rijen' },
+  { code: 356, name: 'Herwijnen', lat: 51.857594, lon: 5.145399, elevation_m: 0.7, municipality: 'West Betuwe', province: 'Gelderland', station_type: 'meteo' },
   { code: 370, name: 'Eindhoven Airport', lat: 51.451, lon: 5.377, elevation_m: 22.6, municipality: 'Eindhoven', province: 'Noord-Brabant', station_type: 'aerodrome' },
-  { code: 375, name: 'Volkel', lat: 51.659, lon: 5.707, elevation_m: 22.0, municipality: 'Uden', province: 'Noord-Brabant', station_type: 'aerodrome' },
-  { code: 377, name: 'Ell', lat: 51.198, lon: 5.763, elevation_m: 30.0, municipality: 'Leudal', province: 'Limburg', station_type: 'meteo' },
-  { code: 380, name: 'Maastricht Airport', lat: 50.906, lon: 5.762, elevation_m: 114.3, municipality: 'Beek', province: 'Limburg', station_type: 'aerodrome' },
-  { code: 391, name: 'Arcen', lat: 51.498, lon: 6.197, elevation_m: 19.5, municipality: 'Venlo', province: 'Limburg', station_type: 'meteo' },
-  { code: 392, name: 'Horst', lat: 51.487, lon: 6.056, elevation_m: 21.9, municipality: 'Horst aan de Maas', province: 'Limburg', station_type: 'meteo' },
-  // --- Wind-only stations (no rainfall data, not in Buienradar) ---
+  { code: 375, name: 'Volkel', lat: 51.658528, lon: 5.706595, elevation_m: 22.0, municipality: 'Uden', province: 'Noord-Brabant', station_type: 'aerodrome' },
+  { code: 377, name: 'Ell', lat: 51.196700, lon: 5.762545, elevation_m: 30.0, municipality: 'Leudal', province: 'Limburg', station_type: 'meteo' },
+  { code: 380, name: 'Maastricht Airport', lat: 50.905256, lon: 5.761783, elevation_m: 114.3, municipality: 'Beek', province: 'Limburg', station_type: 'aerodrome' },
+  { code: 391, name: 'Arcen', lat: 51.497306, lon: 6.196107, elevation_m: 19.5, municipality: 'Venlo', province: 'Limburg', station_type: 'meteo' },
+  { code: 392, name: 'Horst', lat: 51.486836, lon: 6.056189, elevation_m: 21.88, municipality: 'Horst aan de Maas', province: 'Limburg', station_type: 'meteo' },
+  // --- Wind-only / coastal stations (daggegevens API precision) ---
   { code: 209, name: 'IJmond', lat: 52.465, lon: 4.518, elevation_m: 0, municipality: 'Velsen', province: 'Noord-Holland', station_type: 'wind' },
-  { code: 258, name: 'Houtribdijk', lat: 52.649, lon: 5.401, elevation_m: 7.3, municipality: 'Lelystad', province: 'Flevoland', station_type: 'wind' },
+  { code: 229, name: 'Texelhors', lat: 52.995016, lon: 4.719876, elevation_m: 0, municipality: 'Texel', province: 'Noord-Holland', station_type: 'wind' },
+  { code: 258, name: 'Houtribdijk', lat: 52.648187, lon: 5.400388, elevation_m: 7.3, municipality: 'Lelystad', province: 'Flevoland', station_type: 'wind' },
   { code: 285, name: 'Huibertgat', lat: 53.575, lon: 6.399, elevation_m: 0, station_type: 'wind' },
   { code: 308, name: 'Cadzand', lat: 51.381, lon: 3.379, elevation_m: 0, municipality: 'Sluis', province: 'Zeeland', station_type: 'wind' },
+  { code: 311, name: 'Hoofdplaat', lat: 51.379, lon: 3.672, elevation_m: 0, municipality: 'Sluis', province: 'Zeeland', station_type: 'wind' },
   { code: 312, name: 'Oosterschelde', lat: 51.768, lon: 3.622, elevation_m: 0, province: 'Zeeland', station_type: 'wind' },
   { code: 313, name: 'Vlakte van de Raan', lat: 51.505, lon: 3.242, elevation_m: 0, station_type: 'wind' },
   { code: 315, name: 'Hansweert', lat: 51.447, lon: 3.998, elevation_m: 0, municipality: 'Reimerswaal', province: 'Zeeland', station_type: 'wind' },
   { code: 316, name: 'Schaar', lat: 51.657, lon: 3.694, elevation_m: 0, province: 'Zeeland', station_type: 'wind' },
-  { code: 320, name: 'Lichteiland Goeree', lat: 51.926, lon: 3.670, elevation_m: 24.6, province: 'Zuid-Holland', station_type: 'platform' },
+  { code: 320, name: 'Lichteiland Goeree', lat: 51.925472, lon: 3.669861, elevation_m: 24.6, province: 'Zuid-Holland', station_type: 'platform' },
+  { code: 321, name: 'Euro Platform', lat: 51.997951, lon: 3.274938, elevation_m: 0, province: 'Zuid-Holland', station_type: 'platform' },
   { code: 324, name: 'Stavenisse', lat: 51.596, lon: 4.006, elevation_m: 0, municipality: 'Tholen', province: 'Zeeland', station_type: 'wind' },
   { code: 331, name: 'Tholen', lat: 51.480, lon: 4.193, elevation_m: 0, municipality: 'Tholen', province: 'Zeeland', station_type: 'wind' },
 ];
