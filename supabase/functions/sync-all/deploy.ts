@@ -30,7 +30,7 @@ Deno.serve(async (_req) => {
   const syncFunctions: Record<string, string> = {
     knmi_aws: 'sync-knmi?type=aws',
     knmi_neerslag: 'sync-knmi?type=neerslag',
-    rws_waterinfo: 'sync-rws',
+    rws_waterinfo: 'sync-buienradar',
     waterschappen: 'sync-waterschappen',
     wow_nl: 'sync-wow',
     netatmo: 'sync-netatmo',
