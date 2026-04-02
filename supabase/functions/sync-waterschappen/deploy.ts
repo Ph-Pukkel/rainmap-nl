@@ -113,21 +113,40 @@ async function runSync(sourceKey: string, fetchFn: () => Promise<StationRecord[]
 const SOURCE_KEY = 'waterschappen';
 
 // Waterschap Lizard configs. Each uses a different subdomain and obs type code.
-// WNS1400 (id=36) is exclusively KNMI data and is NOT included here.
+// WNS1400 (id=36) is exclusively KNMI radar data and is NOT included here.
+// Verified 2026-04-02: these are the only 4 waterschappen with publicly
+// accessible rain gauge data via Lizard API. Other waterschappen either
+// don't publish via Lizard, require authentication, or use the closed
+// WIWB/HydroNET system via Het Waterschapshuis.
 const WATERSCHAP_CONFIGS: {
   operator: string;
   baseUrl: string;
   obsTypeCode: string;
+  rainfallPeriod: string;
 }[] = [
   {
     operator: 'Hoogheemraadschap Hollands Noorderkwartier',
     baseUrl: 'https://hhnk.lizard.net/api/v4',
     obsTypeCode: 'P.meting.1m',
+    rainfallPeriod: '1min',
   },
   {
     operator: "Waterschap Hunze en Aa's",
     baseUrl: 'https://hunzeenaas.lizard.net/api/v4',
     obsTypeCode: 'WNS9028',
+    rainfallPeriod: 'cumulative',
+  },
+  {
+    operator: 'Waterschap Zuiderzeeland',
+    baseUrl: 'https://zuiderzeeland.lizard.net/api/v4',
+    obsTypeCode: 'WNS3380',
+    rainfallPeriod: 'cumulative',
+  },
+  {
+    operator: 'Hoogheemraadschap De Stichtse Rijnlanden',
+    baseUrl: 'https://hdsr.lizard.net/api/v4',
+    obsTypeCode: 'Rh.5',
+    rainfallPeriod: '5min',
   },
 ];
 
@@ -164,7 +183,7 @@ interface LizardPageResponse {
 
 async function fetchAllTimeseries(baseUrl: string, obsTypeCode: string): Promise<LizardTimeseriesShort[]> {
   const all: LizardTimeseriesShort[] = [];
-  let url: string | null = `${baseUrl}/timeseries/?format=json&observation_type__code=${obsTypeCode}&page_size=100`;
+  let url: string | null = `${baseUrl}/timeseries/?format=json&observation_type__code=${encodeURIComponent(obsTypeCode)}&page_size=100`;
 
   while (url) {
     const resp = await fetch(url);
@@ -235,7 +254,7 @@ async function fetchWaterschappenStations(): Promise<StationRecord[]> {
             measurement: {
               measured_at: ts.last_value_timestamp,
               rainfall_mm: ts.last_value,
-              rainfall_period: config.obsTypeCode === 'P.meting.1m' ? '1min' : 'cumulative',
+              rainfall_period: config.rainfallPeriod,
               raw_data: {
                 lizard_timeseries_uuid: ts.uuid,
                 obs_type_code: config.obsTypeCode,
