@@ -105,83 +105,153 @@ async function runSync(sourceKey: string, fetchFn: () => Promise<StationRecord[]
   }
 }
 
-// --- sync-waterschappen business logic ---
+// --- sync-waterschappen business logic (Lizard API) ---
+// Verified working 2026-04-02. Each waterschap has its own Lizard subdomain.
+// The timeseries endpoint returns abbreviated locations (no geometry/organisation),
+// so we fetch each location individually by UUID to get coordinates.
 
 const SOURCE_KEY = 'waterschappen';
 
-const WFS_ENDPOINTS: Record<string, { url: string; typeName: string }> = {
-  'Waterschap Limburg': {
-    url: 'https://geodata.waterschaplimburg.nl/geoserver/wfs',
-    typeName: 'meetpunten_neerslag',
+// Waterschap Lizard configs. Each uses a different subdomain and obs type code.
+// WNS1400 (id=36) is exclusively KNMI data and is NOT included here.
+const WATERSCHAP_CONFIGS: {
+  operator: string;
+  baseUrl: string;
+  obsTypeCode: string;
+}[] = [
+  {
+    operator: 'Hoogheemraadschap Hollands Noorderkwartier',
+    baseUrl: 'https://hhnk.lizard.net/api/v4',
+    obsTypeCode: 'P.meting.1m',
   },
-  'Waterschap Aa en Maas': {
-    url: 'https://geodata.aaenmaas.nl/geoserver/wfs',
-    typeName: 'meetpunten_neerslag',
+  {
+    operator: "Waterschap Hunze en Aa's",
+    baseUrl: 'https://hunzeenaas.lizard.net/api/v4',
+    obsTypeCode: 'WNS9028',
   },
-  'Waterschap De Dommel': {
-    url: 'https://geodata.dommel.nl/geoserver/wfs',
-    typeName: 'meetpunten_neerslag',
-  },
-  'Hoogheemraadschap van Rijnland': {
-    url: 'https://geodata.rijnland.net/geoserver/wfs',
-    typeName: 'meetpunten_neerslag',
-  },
-  'Waterschap Rivierenland': {
-    url: 'https://geodata.wsrl.nl/geoserver/wfs',
-    typeName: 'meetpunten_neerslag',
-  },
-};
+];
 
-function buildWFSUrl(baseUrl: string, typeName: string): string {
-  const params = new URLSearchParams({
-    service: 'WFS',
-    version: '2.0.0',
-    request: 'GetFeature',
-    typeName,
-    outputFormat: 'application/json',
-    srsName: 'EPSG:4326',
-  });
-  return `${baseUrl}?${params.toString()}`;
+interface LizardTimeseriesShort {
+  uuid: string;
+  location: {
+    url: string;
+    uuid: string;
+    name: string;
+    code: string;
+  } | null;
+  observation_type: {
+    code: string;
+    parameter: string;
+    unit: string;
+  } | null;
+  last_value: number | null;
+  last_value_timestamp: string | null;
+}
+
+interface LizardLocation {
+  uuid: string;
+  name: string;
+  code: string;
+  geometry: { type: string; coordinates: number[] } | null;
+  organisation?: { name: string; uuid: string } | null;
+}
+
+interface LizardPageResponse {
+  count: number;
+  next: string | null;
+  results: LizardTimeseriesShort[];
+}
+
+async function fetchAllTimeseries(baseUrl: string, obsTypeCode: string): Promise<LizardTimeseriesShort[]> {
+  const all: LizardTimeseriesShort[] = [];
+  let url: string | null = `${baseUrl}/timeseries/?format=json&observation_type__code=${obsTypeCode}&page_size=100`;
+
+  while (url) {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      console.warn(`Lizard API fout ${obsTypeCode}: ${resp.status}`);
+      break;
+    }
+    const page: LizardPageResponse = await resp.json();
+    all.push(...page.results);
+    url = page.next;
+  }
+  return all;
+}
+
+async function fetchLocation(locationUrl: string): Promise<LizardLocation | null> {
+  try {
+    const resp = await fetch(locationUrl);
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  }
 }
 
 async function fetchWaterschappenStations(): Promise<StationRecord[]> {
   const allStations: StationRecord[] = [];
+  const seenLocations = new Set<string>();
 
-  for (const [name, config] of Object.entries(WFS_ENDPOINTS)) {
+  for (const config of WATERSCHAP_CONFIGS) {
     try {
-      const url = buildWFSUrl(config.url, config.typeName);
-      const response = await fetch(url);
+      const timeseries = await fetchAllTimeseries(config.baseUrl, config.obsTypeCode);
+      console.log(`Lizard ${config.operator}: ${timeseries.length} timeseries gevonden`);
 
-      if (!response.ok) {
-        console.warn(`WFS fout voor ${name}: ${response.status}`);
-        continue;
+      for (const ts of timeseries) {
+        if (!ts.location) continue;
+
+        const locUuid = ts.location.uuid;
+        if (seenLocations.has(locUuid)) continue;
+        seenLocations.add(locUuid);
+
+        // Fetch full location to get geometry
+        const loc = await fetchLocation(ts.location.url);
+        if (!loc?.geometry || loc.geometry.type !== 'Point') continue;
+
+        const [lon, lat] = loc.geometry.coordinates;
+
+        // Skip coordinates outside Netherlands
+        if (lat < 50.5 || lat > 53.7 || lon < 3.0 || lon > 7.3) continue;
+
+        const orgName = loc.organisation?.name || config.operator;
+
+        allStations.push({
+          external_id: `lizard-${locUuid}`,
+          name: loc.name,
+          latitude: lat,
+          longitude: lon,
+          operator: orgName,
+          sensor_type: 'rain_gauge',
+          metadata: {
+            lizard_timeseries_uuid: ts.uuid,
+            location_uuid: locUuid,
+            location_code: loc.code,
+            obs_type_code: config.obsTypeCode,
+            obs_unit: ts.observation_type?.unit || 'mm',
+            organisation: orgName,
+          },
+          ...(ts.last_value != null && ts.last_value_timestamp ? {
+            measurement: {
+              measured_at: ts.last_value_timestamp,
+              rainfall_mm: ts.last_value,
+              rainfall_period: config.obsTypeCode === 'P.meting.1m' ? '1min' : 'cumulative',
+              raw_data: {
+                lizard_timeseries_uuid: ts.uuid,
+                obs_type_code: config.obsTypeCode,
+              },
+            },
+          } : {}),
+        });
       }
 
-      const geojson = await response.json();
-
-      if (geojson.features) {
-        for (const feature of geojson.features) {
-          if (feature.geometry?.type !== 'Point') continue;
-
-          const [lon, lat] = feature.geometry.coordinates;
-          const props = feature.properties || {};
-
-          allStations.push({
-            external_id: props.meetpuntcode || props.id || `${name}-${lon.toFixed(4)}-${lat.toFixed(4)}`,
-            name: props.naam || props.name || `Meetpunt ${name}`,
-            latitude: lat,
-            longitude: lon,
-            operator: name,
-            sensor_type: 'Neerslagmeter',
-            metadata: { ...props, waterschap: name },
-          });
-        }
-      }
+      console.log(`${config.operator}: ${allStations.length} stations met coordinaten`);
     } catch (error) {
-      console.error(`Fout bij ophalen ${name}:`, error);
+      console.error(`Fout bij ophalen ${config.operator}:`, error);
     }
   }
 
+  console.log(`Waterschappen totaal: ${allStations.length} stations via Lizard API`);
   return allStations;
 }
 

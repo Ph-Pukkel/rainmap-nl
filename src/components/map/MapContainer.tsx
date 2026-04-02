@@ -133,9 +133,9 @@ export default function MapContainer() {
       style: getMapStyleUrl(mapStyle),
       center: center,
       zoom: zoom,
-      minZoom: 6,
+      minZoom: 5,
       maxZoom: 18,
-      maxBounds: [[2.5, 50.5], [7.8, 54.0]],
+      maxBounds: [[1.0, 49.5], [9.5, 55.0]],
     });
 
     m.addControl(new maplibregl.NavigationControl(), 'top-right');
