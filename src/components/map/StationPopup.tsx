@@ -34,7 +34,19 @@ export default function StationPopup() {
         .single();
 
       if (!error && data) {
-        setStation(data as StationWithLatest);
+        const s = data as StationWithLatest;
+        setStation(s);
+        // Track station click
+        fetch('/api/track-click', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            stationId: s.id,
+            stationName: s.name,
+            sourceKey: s.source_key,
+            sessionId: sessionStorage.getItem('session_id') || undefined,
+          }),
+        }).catch(() => {});
       }
       setLoading(false);
     }

@@ -14,6 +14,7 @@ interface Stats {
   topCities: { city: string; count: number }[];
   devices: { device: string; count: number }[];
   topIPs: { ip: string; count: number; lastSeen: string; city?: string; country?: string }[];
+  stationClicks: { station: string; source: string; ip: string; location: string | null; time: string }[];
 }
 
 const COUNTRY_NAMES: Record<string, string> = {
@@ -255,6 +256,41 @@ export default function StatsPage() {
                           <td className="py-2 text-right text-gray-900 dark:text-white">{entry.count}</td>
                           <td className="py-2 text-right text-gray-500 dark:text-gray-400">
                             {new Date(entry.lastSeen).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Station clicks */}
+            {stats.stationClicks && stats.stationClicks.length > 0 && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700 mb-8">
+                <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
+                  Stationklikken
+                </h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                        <th className="pb-2 font-medium">Station</th>
+                        <th className="pb-2 font-medium">Bron</th>
+                        <th className="pb-2 font-medium">IP-adres</th>
+                        <th className="pb-2 font-medium">Locatie</th>
+                        <th className="pb-2 font-medium text-right">Tijdstip</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats.stationClicks.map((click, i) => (
+                        <tr key={i} className="border-b border-gray-100 dark:border-gray-700/50">
+                          <td className="py-2 text-gray-900 dark:text-white">{click.station || '-'}</td>
+                          <td className="py-2 text-gray-600 dark:text-gray-300">{click.source || '-'}</td>
+                          <td className="py-2 font-mono text-gray-900 dark:text-white">{click.ip || '-'}</td>
+                          <td className="py-2 text-gray-600 dark:text-gray-300">{click.location || '-'}</td>
+                          <td className="py-2 text-right text-gray-500 dark:text-gray-400">
+                            {new Date(click.time).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                           </td>
                         </tr>
                       ))}

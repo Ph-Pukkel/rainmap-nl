@@ -130,6 +130,22 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.count - a.count)
     .slice(0, 20);
 
+  // Station clicks
+  const { data: clicks } = await supabase
+    .from('station_clicks')
+    .select('station_name, source_key, ip_address, city, country, created_at')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  const stationClicks = (clicks || []).map((c) => ({
+    station: c.station_name,
+    source: c.source_key,
+    ip: c.ip_address,
+    location: [c.city, c.country].filter(Boolean).join(', ') || null,
+    time: c.created_at,
+  }));
+
   return NextResponse.json({
     period: { days, since },
     totalViews,
@@ -141,5 +157,6 @@ export async function GET(req: NextRequest) {
     topCities,
     devices,
     topIPs,
+    stationClicks,
   });
 }
