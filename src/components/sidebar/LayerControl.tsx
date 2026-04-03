@@ -36,6 +36,7 @@ export default function LayerControl() {
   }, []);
 
   const filteredSources = dataSources.filter((source) => {
+    if (!source.is_active && source.station_count === 0) return false;
     if (filterMode === 'alle') return true;
     if (filterMode === 'professioneel') return source.source_type === 'professioneel';
     if (filterMode === 'amateur') return source.source_type === 'vrijwilliger' || source.source_type === 'consument';
