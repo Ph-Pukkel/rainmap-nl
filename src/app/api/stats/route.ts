@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   // Fetch all page views within the period
   const { data: views, error } = await supabase
     .from('page_views')
-    .select('path, referrer, country, city, screen_width, session_id, created_at')
+    .select('path, referrer, country, city, screen_width, session_id, ip_address, created_at')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(10000);
@@ -112,6 +112,24 @@ export async function GET(req: NextRequest) {
     .map(([device, count]) => ({ device, count }))
     .sort((a, b) => b.count - a.count);
 
+  // IP addresses
+  const ipCounts: Record<string, { count: number; lastSeen: string; city?: string; country?: string }> = {};
+  for (const r of rows) {
+    if (r.ip_address) {
+      if (!ipCounts[r.ip_address]) {
+        ipCounts[r.ip_address] = { count: 0, lastSeen: r.created_at, city: r.city, country: r.country };
+      }
+      ipCounts[r.ip_address].count++;
+      if (r.created_at > ipCounts[r.ip_address].lastSeen) {
+        ipCounts[r.ip_address].lastSeen = r.created_at;
+      }
+    }
+  }
+  const topIPs = Object.entries(ipCounts)
+    .map(([ip, info]) => ({ ip, ...info }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
+
   return NextResponse.json({
     period: { days, since },
     totalViews,
@@ -122,5 +140,6 @@ export async function GET(req: NextRequest) {
     topCountries,
     topCities,
     devices,
+    topIPs,
   });
 }

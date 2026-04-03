@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     }
 
     const forwarded = req.headers.get('x-forwarded-for');
+    const ipAddress = forwarded?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || undefined;
     const country = req.headers.get('x-vercel-ip-country') || undefined;
     const city = req.headers.get('x-vercel-ip-city') || undefined;
     const userAgent = req.headers.get('user-agent') || undefined;
@@ -24,6 +25,7 @@ export async function POST(req: NextRequest) {
       path: path.slice(0, 500),
       referrer: referrer?.slice(0, 1000) || null,
       user_agent: userAgent?.slice(0, 500) || null,
+      ip_address: ipAddress || null,
       country: country || null,
       city: city ? decodeURIComponent(city) : null,
       screen_width: screenWidth || null,

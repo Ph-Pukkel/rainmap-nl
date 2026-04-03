@@ -13,6 +13,7 @@ interface Stats {
   topCountries: { country: string; count: number }[];
   topCities: { city: string; count: number }[];
   devices: { device: string; count: number }[];
+  topIPs: { ip: string; count: number; lastSeen: string; city?: string; country?: string }[];
 }
 
 const COUNTRY_NAMES: Record<string, string> = {
@@ -225,6 +226,41 @@ export default function StatsPage() {
                 </div>
               )}
             </div>
+
+            {/* IP Addresses */}
+            {stats.topIPs && stats.topIPs.length > 0 && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700 mb-8">
+                <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
+                  IP-adressen
+                </h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                        <th className="pb-2 font-medium">IP-adres</th>
+                        <th className="pb-2 font-medium">Locatie</th>
+                        <th className="pb-2 font-medium text-right">Weergaven</th>
+                        <th className="pb-2 font-medium text-right">Laatst gezien</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats.topIPs.map((entry) => (
+                        <tr key={entry.ip} className="border-b border-gray-100 dark:border-gray-700/50">
+                          <td className="py-2 font-mono text-gray-900 dark:text-white">{entry.ip}</td>
+                          <td className="py-2 text-gray-600 dark:text-gray-300">
+                            {[entry.city, entry.country].filter(Boolean).join(', ') || '-'}
+                          </td>
+                          <td className="py-2 text-right text-gray-900 dark:text-white">{entry.count}</td>
+                          <td className="py-2 text-right text-gray-500 dark:text-gray-400">
+                            {new Date(entry.lastSeen).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Footer */}
             <p className="text-center text-xs text-gray-400 dark:text-gray-500">
