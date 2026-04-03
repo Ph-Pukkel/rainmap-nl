@@ -59,18 +59,24 @@ function DayChart({ data }: { data: { date: string; views: number; sessions: num
   const maxViews = Math.max(...data.map((d) => d.views), 1);
 
   return (
-    <div className="flex items-end gap-1 h-40">
-      {data.map((d) => (
-        <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group relative">
-          <div
-            className="w-full bg-blue-500 dark:bg-blue-400 rounded-t transition-all duration-300 min-h-[2px]"
-            style={{ height: `${(d.views / maxViews) * 100}%` }}
-          />
-          <div className="absolute -top-8 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
-            {d.date}: {d.views} views, {d.sessions} sessies
+    <div className="flex items-end gap-2 h-48 px-2">
+      {data.map((d) => {
+        const pct = (d.views / maxViews) * 100;
+        const dateStr = new Date(d.date + 'T00:00:00').toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+        return (
+          <div key={d.date} className="flex-1 flex flex-col items-center gap-1 max-w-16 group relative">
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{d.views}</span>
+            <div
+              className="w-full bg-blue-500 dark:bg-blue-400 rounded-t min-h-[4px]"
+              style={{ height: `${pct}%` }}
+            />
+            <span className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">{dateStr}</span>
+            <div className="absolute -top-10 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
+              {d.views} views, {d.sessions} sessies
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -149,10 +155,6 @@ export default function StatsPage() {
                   Weergaven per dag
                 </h2>
                 <DayChart data={stats.viewsPerDay} />
-                <div className="flex justify-between mt-2 text-xs text-gray-400">
-                  <span>{stats.viewsPerDay[0]?.date}</span>
-                  <span>{stats.viewsPerDay[stats.viewsPerDay.length - 1]?.date}</span>
-                </div>
               </div>
             )}
 
