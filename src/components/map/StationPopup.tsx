@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useUIStore } from '@/store/uiStore';
-import { supabase } from '@/lib/supabase/client';
+import { getStationById } from '@/data';
 import type { StationWithLatest } from '@/types';
 import { formatDate, formatRainfall } from '@/lib/utils';
 
@@ -26,31 +26,11 @@ export default function StationPopup() {
     }
 
     setLoading(true);
-    async function fetchStation() {
-      const { data, error } = await supabase
-        .from('stations_with_latest')
-        .select('*')
-        .eq('id', selectedStationId)
-        .single();
-
-      if (!error && data) {
-        const s = data as StationWithLatest;
-        setStation(s);
-        // Track station click
-        fetch('/api/track-click', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            stationId: s.id,
-            stationName: s.name,
-            sourceKey: s.source_key,
-            sessionId: sessionStorage.getItem('session_id') || undefined,
-          }),
-        }).catch(() => {});
-      }
-      setLoading(false);
+    const s = getStationById(selectedStationId);
+    if (s) {
+      setStation(s as StationWithLatest);
     }
-    fetchStation();
+    setLoading(false);
   }, [selectedStationId]);
 
   if (!selectedStationId) return null;

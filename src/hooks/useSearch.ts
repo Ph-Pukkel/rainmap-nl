@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '@/lib/supabase/client';
+import { searchStations } from '@/data';
 
 interface SearchResult {
   id: string;
@@ -20,7 +20,7 @@ export function useSearch() {
   const [isLoading, setIsLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const search = useCallback(async (searchQuery: string) => {
+  const search = useCallback((searchQuery: string) => {
     if (searchQuery.length < 2) {
       setResults([]);
       return;
@@ -28,13 +28,8 @@ export function useSearch() {
 
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.rpc('search_stations', {
-        search_query: searchQuery,
-        result_limit: 10,
-      });
-
-      if (error) throw error;
-      setResults((data as SearchResult[]) || []);
+      const data = searchStations(searchQuery, 10);
+      setResults(data);
     } catch (err) {
       console.error('Zoekfout:', err);
       setResults([]);

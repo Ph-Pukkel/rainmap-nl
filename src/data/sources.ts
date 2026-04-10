@@ -1,0 +1,56 @@
+import type { DataSource } from '@/types';
+
+export const DATA_SOURCES: DataSource[] = [
+  {
+    id: 'knmi-aws',
+    source_key: 'knmi_aws',
+    display_name: 'KNMI AWS',
+    description: 'Royal Netherlands Meteorological Institute - Automatic Weather Stations',
+    source_type: 'professioneel',
+    api_base_url: 'https://www.knmi.nl/opendata/',
+    is_active: true,
+    requires_key: false,
+    is_configured: true,
+    sync_interval: '1 hour',
+    last_sync_at: new Date().toISOString(),
+    last_sync_status: 'success',
+    last_error: null,
+    station_count: 0, // Will be calculated dynamically
+    icon_marker: 'circle',
+    color: '#3B82F6',
+    layer_order: 1,
+    metadata: {
+      wmo_codes: true,
+      temperature: true,
+      pressure: true,
+      wind: true,
+    },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'waterschappen',
+    source_key: 'waterschappen',
+    display_name: 'Waterschappen',
+    description: 'Regional water boards - Rainfall and water level monitoring',
+    source_type: 'professioneel',
+    api_base_url: null,
+    is_active: true,
+    requires_key: false,
+    is_configured: true,
+    sync_interval: '1 hour',
+    last_sync_at: new Date().toISOString(),
+    last_sync_status: 'success',
+    last_error: null,
+    station_count: 0, // Will be calculated dynamically
+    icon_marker: 'circle',
+    color: '#10B981',
+    layer_order: 2,
+    metadata: {
+      rainfall: true,
+      water_level: true,
+    },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];

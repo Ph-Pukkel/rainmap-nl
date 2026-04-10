@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useLayerStore } from '@/store/layerStore';
-import { supabase } from '@/lib/supabase/client';
+import { getDataSources } from '@/data';
 import type { DataSource, SourceType } from '@/types';
 import LayerItem from './LayerItem';
 import FilterPanel from './FilterPanel';
@@ -21,18 +21,14 @@ export default function LayerControl() {
   const { filterMode } = useLayerStore();
 
   useEffect(() => {
-    async function fetchSources() {
-      const { data, error } = await supabase
-        .from('data_sources')
-        .select('*')
-        .order('layer_order');
-
-      if (!error && data) {
-        setDataSources(data as DataSource[]);
-      }
+    try {
+      const sources = getDataSources();
+      setDataSources(sources);
+    } catch (err) {
+      console.error('Fout bij laden databronnen:', err);
+    } finally {
       setLoading(false);
     }
-    fetchSources();
   }, []);
 
   const filteredSources = dataSources.filter((source) => {

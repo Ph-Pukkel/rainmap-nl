@@ -9,7 +9,7 @@ import { useUIStore } from '@/store/uiStore';
 import { MAP_STYLES } from '@/lib/map/styles';
 import { MARKER_CONFIGS } from '@/lib/map/markers';
 import { createGeoJSONSourceSpec } from '@/lib/map/clustering';
-import { supabase } from '@/lib/supabase/client';
+import { getStationsGeoJSON } from '@/data';
 import { SOURCE_KEYS } from '@/lib/constants';
 import type { StationFeatureCollection } from '@/types';
 
@@ -28,11 +28,9 @@ export default function MapContainer() {
   const { activeLayers, setSourceError } = useLayerStore();
   const { setSelectedStationId } = useUIStore();
 
-  const loadSourceData = useCallback(async (sourceKey: string) => {
+  const loadSourceData = useCallback((sourceKey: string) => {
     try {
-      const { data, error } = await supabase.rpc('get_stations_geojson', { source_keys: [sourceKey] });
-      if (error) throw error;
-      const geojson = data as StationFeatureCollection;
+      const geojson = getStationsGeoJSON([sourceKey]);
       sourceDataCache[sourceKey] = geojson;
       return geojson;
     } catch (err) {

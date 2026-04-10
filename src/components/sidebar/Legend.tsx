@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useLayerStore } from '@/store/layerStore';
-import { supabase } from '@/lib/supabase/client';
+import { getDataSources } from '@/data';
 import type { DataSource } from '@/types';
 
 export default function Legend() {
@@ -10,14 +10,12 @@ export default function Legend() {
   const [sources, setSources] = useState<DataSource[]>([]);
 
   useEffect(() => {
-    async function fetchSources() {
-      const { data } = await supabase
-        .from('data_sources')
-        .select('source_key, display_name, color, source_type')
-        .order('layer_order');
-      if (data) setSources(data as DataSource[]);
+    try {
+      const sources = getDataSources();
+      setSources(sources);
+    } catch (err) {
+      console.error('Fout bij laden databronnen:', err);
     }
-    fetchSources();
   }, []);
 
   const activeSources = sources.filter((s) => activeLayers.has(s.source_key));
